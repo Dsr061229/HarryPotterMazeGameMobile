@@ -1,0 +1,592 @@
+:root {
+  color-scheme: dark;
+  font-family:
+    Inter, "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #08100d;
+  color: #f4f4e9;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#game-shell {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+body {
+  background:
+    radial-gradient(circle at 20% 15%, rgba(173, 201, 116, 0.14), transparent 30%),
+    linear-gradient(135deg, #08100d, #111713 52%, #241a17);
+  position: fixed;
+  inset: 0;
+}
+
+#game {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* ===== 移动端控制层 ===== */
+#mobile-controls {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+}
+
+#virtual-joystick {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+#virtual-joystick.joystick-active {
+  opacity: 1;
+}
+
+#joystick-base {
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 248, 205, 0.45);
+  background: rgba(20, 30, 20, 0.35);
+  backdrop-filter: blur(4px);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 18px rgba(255, 238, 151, 0.15);
+}
+
+#joystick-knob {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 248, 205, 0.7);
+  background: rgba(224, 197, 101, 0.45);
+  backdrop-filter: blur(4px);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 22px rgba(255, 238, 151, 0.35);
+  transition: none;
+}
+
+/* ===== 移动端按钮 ===== */
+#mobile-buttons {
+  position: absolute;
+  right: 12px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.mobile-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid rgba(238, 230, 182, 0.35);
+  background: rgba(9, 14, 11, 0.55);
+  backdrop-filter: blur(10px);
+  color: #fbf8df;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+  outline: none;
+  pointer-events: auto;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.mobile-btn:active,
+.mobile-btn.active {
+  border-color: rgba(255, 238, 151, 0.8);
+  background: rgba(224, 197, 101, 0.35);
+  box-shadow: 0 0 16px rgba(255, 238, 151, 0.3);
+}
+
+.mobile-btn--sprint {
+  border-color: rgba(159, 220, 255, 0.4);
+  font-size: 14px;
+}
+
+.mobile-btn--sprint.active {
+  border-color: rgba(120, 200, 255, 0.8);
+  background: rgba(80, 160, 220, 0.35);
+  box-shadow: 0 0 18px rgba(120, 200, 255, 0.4);
+}
+
+.mobile-btn--sprint.boosting {
+  border-color: rgba(255, 215, 0, 0.8) !important;
+  background: rgba(255, 215, 0, 0.25) !important;
+  box-shadow: 0 0 22px rgba(255, 215, 0, 0.5) !important;
+}
+
+.mobile-btn--interact {
+  border-color: rgba(100, 240, 150, 0.45);
+  font-size: 14px;
+}
+
+/* ===== HUD（横屏适配） ===== */
+#hud {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: #fbf8df;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+
+.hud-group {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  display: flex;
+  gap: 8px;
+  width: min(580px, calc(100vw - 80px));
+  transform: translateX(-50%);
+}
+
+.meter {
+  min-width: 0;
+  flex: 1 1 0;
+  padding: 8px 10px;
+  border: 1px solid rgba(238, 230, 182, 0.24);
+  border-radius: 6px;
+  background: rgba(9, 14, 11, 0.62);
+  backdrop-filter: blur(10px);
+}
+
+.meter--narrow {
+  flex: 0 0 auto;
+  min-width: 56px;
+  max-width: 70px;
+}
+
+.meter--stamina {
+  flex: 0 0 auto;
+  min-width: 86px;
+  max-width: 100px;
+  display: flex;
+  flex-direction: column;
+}
+
+.stamina-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  margin-bottom: 2px;
+  overflow: hidden;
+}
+
+#stamina-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #7ec8e3, #a0e0ff);
+  transition: width 0.15s ease;
+}
+
+#stamina-fill.low {
+  background: linear-gradient(90deg, #e0a050, #ff8840);
+}
+
+#stamina-fill.boosting {
+  background: linear-gradient(90deg, #ffd700, #ffaa00);
+}
+
+.meter span {
+  display: block;
+  font-size: 11px;
+  color: #d1caa5;
+}
+
+.meter strong {
+  display: block;
+  margin-top: 1px;
+  font-size: clamp(15px, 2.2vw, 22px);
+  line-height: 1;
+}
+
+#message {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  width: min(600px, calc(100vw - 120px));
+  min-height: 36px;
+  padding: 10px 14px;
+  border: 1px solid rgba(238, 230, 182, 0.2);
+  border-radius: 6px;
+  background: rgba(8, 12, 10, 0.68);
+  font-size: clamp(13px, 1.8vw, 15px);
+  line-height: 1.3;
+  text-align: center;
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+#reticle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 248, 205, 0.74);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 14px rgba(255, 238, 151, 0.35);
+}
+
+#reticle::after {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: #fff1a4;
+  content: "";
+  transform: translate(-50%, -50%);
+}
+
+#interaction {
+  position: absolute;
+  top: calc(50% + 30px);
+  left: 50%;
+  min-height: 20px;
+  transform: translateX(-50%);
+  font-weight: 700;
+  font-size: 14px;
+  color: #ffe797;
+}
+
+/* ===== 面板 ===== */
+.panel {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100vw - 40px));
+  max-height: 90vh;
+  overflow-y: auto;
+  padding: 24px;
+  border: 1px solid rgba(244, 234, 190, 0.28);
+  border-radius: 8px;
+  background: rgba(10, 15, 12, 0.82);
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.45);
+  transform: translate(-50%, -50%);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+  z-index: 30;
+}
+
+.panel h1 {
+  margin: 0 0 10px;
+  font-size: clamp(28px, 7vw, 48px);
+  line-height: 0.95;
+}
+
+.panel h2 {
+  margin: 0 0 10px;
+  font-size: clamp(24px, 5.5vw, 38px);
+}
+
+.panel p {
+  margin: 0 0 16px;
+  color: #ded6b4;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.controls span {
+  min-width: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(244, 234, 190, 0.16);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f3e9bd;
+  text-align: center;
+  font-size: 12px;
+}
+
+button {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  border-radius: 7px;
+  background: #e0c565;
+  color: #17120a;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 800;
+  font-size: 16px;
+  pointer-events: auto;
+}
+
+button:focus-visible {
+  outline: 3px solid #fff0a4;
+  outline-offset: 3px;
+}
+
+.quiz-options {
+  display: grid;
+  gap: 8px;
+}
+
+.quiz-options button {
+  min-height: 50px;
+  padding: 10px 14px;
+  border: 1px solid rgba(244, 234, 190, 0.16);
+  background: rgba(224, 197, 101, 0.12);
+  color: #fff3bf;
+  text-align: left;
+  font-size: 15px;
+}
+
+.quiz-options button:hover {
+  background: rgba(224, 197, 101, 0.22);
+}
+
+/* ===== 屏幕特效 ===== */
+#screen-effects,
+#snare-vines,
+#dementor-frost,
+#damage-flash {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+#snare-vines,
+#dementor-frost,
+#damage-flash {
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
+body.snared #snare-vines {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 42%, rgba(0, 0, 0, 0.76) 78%),
+    repeating-radial-gradient(ellipse at 12% 90%, transparent 0 18px, rgba(7, 13, 8, 0.86) 20px 26px),
+    repeating-radial-gradient(ellipse at 88% 12%, transparent 0 20px, rgba(4, 10, 5, 0.82) 22px 29px);
+  filter: contrast(1.15);
+}
+
+body.dementor #dementor-frost {
+  opacity: 1;
+  background:
+    radial-gradient(circle at 50% 48%, transparent 38%, rgba(7, 14, 17, 0.82) 82%),
+    linear-gradient(115deg, rgba(218, 240, 255, 0.2), transparent 26% 72%, rgba(235, 248, 255, 0.18));
+  box-shadow: inset 0 0 90px rgba(224, 243, 255, 0.45);
+}
+
+body.damaged #damage-flash {
+  opacity: 1;
+  background: rgba(123, 7, 14, 0.32);
+}
+
+body.shake #game {
+  animation: fear-shake 160ms infinite alternate;
+}
+
+#screen-effects::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+  z-index: 10;
+}
+
+@keyframes fear-shake {
+  from { transform: translate3d(-1px, 1px, 0); }
+  to   { transform: translate3d(1px, -1px, 0); }
+}
+
+.hidden {
+  display: none;
+}
+
+.joystick-hidden {
+  display: none;
+}
+
+body.ceremony #game {
+  filter: brightness(0.85) contrast(1.08);
+  transition: filter 1.5s ease;
+}
+
+/* ===== 认证面板 ===== */
+.auth-sub { text-align: center; color: #a89a6a; font-size: 13px; margin-bottom: 12px; }
+.auth-hint { text-align: center; color: #887a5a; font-size: 11px; margin: 8px 0 0; }
+
+#auth-uid {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid rgba(238, 230, 182, 0.3);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  color: #fbf8df;
+  font-size: 16px;
+  text-align: center;
+  margin-bottom: 10px;
+  outline: none;
+}
+
+#auth-msg { font-size: 12px; color: #ff8888; text-align: center; margin-bottom: 8px; min-height: 18px; }
+
+.rules-scroll { max-height: 40vh; overflow-y: auto; margin-bottom: 12px; }
+.rules-scroll p { font-size: 13px; margin-bottom: 8px; }
+
+.admin-list { max-height: 40vh; overflow-y: auto; font-size: 12px; }
+.admin-list div { padding: 6px 8px; border-bottom: 1px solid rgba(255,255,255,0.1); display: flex; justify-content: space-between; align-items: center; }
+.admin-list button { width: auto; min-height: 28px; padding: 2px 10px; font-size: 11px; margin-left: 8px; }
+.admin-list .btn-ban { background: #cc4444; color: #fff; }
+.admin-list .btn-del { background: #884444; color: #fff; }
+
+#my-stats { font-size: 13px; margin-bottom: 12px; }
+#my-stats p { margin: 4px 0; }
+
+/* 管理员菜单入口 */
+#hud-btns { position: absolute; top: 6px; right: 6px; z-index: 200; display: flex; gap: 4px; }
+.hud-btn { width: 32px; height: 32px; min-height: auto; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: #fff; font-size: 14px; cursor: pointer; opacity: 0.5; padding: 0; line-height: 1; }
+.hud-btn:hover { opacity: 0.9; }
+  position: fixed; top: 6px; right: 6px;
+  z-index: 200; font-size: 18px; background: none; border: none;
+  cursor: pointer; opacity: 0.4; width: auto; min-height: auto;
+}
+#admin-menu-btn:hover { opacity: 0.8; }
+  font-size: 12px;
+  color: #a89a6a;
+  text-align: center;
+  margin: 6px 0 0;
+  font-style: italic;
+}
+
+/* ===== 横屏旋转提示 ===== */
+#rotate-hint {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 16, 13, 0.95);
+  z-index: 200;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+}
+
+#rotate-hint.show {
+  display: flex;
+}
+
+#rotate-hint .rotate-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+  animation: rotate-icon-anim 2s ease-in-out infinite;
+}
+
+#rotate-hint p {
+  color: #fbf8df;
+  font-size: 22px;
+  font-weight: 700;
+  margin: 0;
+  text-align: center;
+  padding: 0 20px;
+}
+
+@keyframes rotate-icon-anim {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(90deg); }
+}
+@media (max-width: 680px) {
+  .hud-group {
+    top: 6px;
+    gap: 4px;
+    width: calc(100vw - 70px);
+  }
+
+  .meter {
+    padding: 6px 7px;
+  }
+
+  .meter strong {
+    font-size: clamp(13px, 3vw, 18px);
+  }
+
+  .mobile-btn {
+    width: 54px;
+    height: 54px;
+    font-size: 11px;
+  }
+
+  #joystick-base {
+    width: 110px;
+    height: 110px;
+  }
+
+  #joystick-knob {
+    width: 46px;
+    height: 46px;
+  }
+
+  #mobile-buttons {
+    right: 8px;
+    bottom: 40px;
+    gap: 8px;
+  }
+}
+
+@media (max-height: 400px) {
+  .mobile-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 10px;
+  }
+
+  #joystick-base {
+    width: 96px;
+    height: 96px;
+  }
+
+  #joystick-knob {
+    width: 38px;
+    height: 38px;
+  }
+
+  #mobile-buttons {
+    right: 4px;
+    bottom: 24px;
+    gap: 4px;
+  }
+}

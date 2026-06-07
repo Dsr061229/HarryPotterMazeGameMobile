@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, height=device-height" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>暮篱迷宫 - 三强争霸赛</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <main id="game-shell">
+      <canvas id="game"></canvas>
+
+      <!-- 横屏提示遮罩 -->
+      <div id="rotate-hint">
+        <div class="rotate-icon">📱</div>
+        <p>请旋转设备至横屏</p>
+      </div>
+
+      <!-- 登录/注册面板 -->
+      <section id="auth-panel" class="panel">
+        <h2>暮篱迷宫</h2>
+        <p class="auth-sub">三强争霸赛 · 账号系统</p>
+        <input id="auth-uid" type="text" placeholder="输入你的游戏ID（英文+数字）" maxlength="20" autocomplete="off" />
+        <div id="auth-msg"></div>
+        <button id="auth-login">进入游戏</button>
+        <p class="auth-hint">新用户将自动注册，请牢记你的ID</p>
+      </section>
+
+      <!-- 游戏规则面板 -->
+      <section id="rules-panel" class="panel hidden">
+        <h2>游戏规则</h2>
+        <div class="rules-scroll">
+          <p>🧙 你在三强争霸赛的最终试炼——树篱迷宫中。</p>
+          <p>🎯 目标：找到并解锁火龙杯，逃出迷宫。</p>
+          <p>🕯 左侧滑动移动，右侧滑动环顾四周。</p>
+          <p>⚡ 疾跑按钮加速，互动按钮施展咒语。</p>
+          <p>🧩 回答斯芬克斯的谜题，解除魔法屏障。</p>
+          <p>🔑 其中一个斯芬克斯携带火龙杯钥匙。</p>
+          <p>👻 躲避摄魂怪，用呼神护卫击退它们。</p>
+          <p>🕸 小心魔鬼网和炸尾螺的袭击。</p>
+          <p>✨ 收集魔力碎片和金色飞贼获取积分。</p>
+          <p>⏱ 时间耗尽或生命归零则失败。</p>
+        </div>
+        <button id="rules-ok">我准备好了</button>
+      </section>
+
+      <!-- 管理后台 -->
+      <section id="admin-panel" class="panel hidden">
+        <h2>管理后台</h2>
+        <div id="admin-users" class="admin-list"></div>
+        <button id="admin-close">关闭</button>
+      </section>
+
+      <!-- 战绩/排行榜 -->
+      <section id="stats-panel" class="panel hidden">
+        <h2>我的战绩</h2>
+        <div id="my-stats"></div>
+        <h3>排行榜</h3>
+        <div id="leaderboard" class="admin-list"></div>
+        <button id="stats-close">关闭</button>
+      </section>
+
+      <!-- 移动端虚拟摇杆 -->
+      <div id="mobile-controls">
+        <div id="virtual-joystick" class="joystick-hidden">
+          <div id="joystick-base"></div>
+          <div id="joystick-knob"></div>
+        </div>
+        <div id="mobile-buttons">
+          <button id="btn-sprint" class="mobile-btn mobile-btn--sprint">疾跑</button>
+          <button id="btn-interact" class="mobile-btn mobile-btn--interact">互动</button>
+          <button id="btn-mark" class="mobile-btn mobile-btn--mark">标记</button>
+          <button id="btn-scroll" class="mobile-btn mobile-btn--scroll">显形</button>
+        </div>
+      </div>
+
+      <section id="hud" aria-label="游戏状态">
+        <div class="hud-group">
+          <div class="meter">
+            <span>时间</span>
+            <strong id="time">07:00</strong>
+          </div>
+          <div class="meter">
+            <span>生命</span>
+            <strong id="health">100</strong>
+          </div>
+          <div class="meter">
+            <span>魔杖</span>
+            <strong id="runes">100%</strong>
+          </div>
+          <div class="meter meter--narrow">
+            <span>积分</span>
+            <strong id="score">0</strong>
+          </div>
+          <div class="meter meter--narrow">
+            <span>标记</span>
+            <strong id="dead-end-count">0</strong>
+          </div>
+          <div class="meter meter--stamina">
+            <div class="stamina-bar"><div id="stamina-fill"></div></div>
+            <span>体力</span>
+          </div>
+        </div>
+        <div id="hud-btns">
+          <button id="btn-stats" class="hud-btn">📊</button>
+          <button id="btn-admin" class="hud-btn hidden">⚙</button>
+        </div>
+        <div id="message">你站在拱门前，迷宫深不见底。</div>
+        <div id="reticle"></div>
+        <div id="interaction"></div>
+      </section>
+
+      <section id="overlay" class="panel">
+        <h1>暮篱迷宫</h1>
+        <p>
+          穿过古老拱门，踏入三强争霸赛最终的试炼——树篱迷宫。火把照亮狭窄的通道，
+          黑暗仍潜伏在每个转角。聆听火龙杯的圣歌，躲避摄魂怪与炸尾螺，在时间耗尽前找到出口。
+        </p>
+        <div class="controls">
+          <span>左侧滑动 移动</span>
+          <span>右侧滑动 环顾</span>
+          <span>疾跑按钮 冲刺</span>
+          <span>互动按钮 交互/挣脱</span>
+          <span>标记按钮 记录死路</span>
+          <span>卷轴按钮 幽灵路径</span>
+        </div>
+        <p class="ceremony-hint">踏入拱门后，倒计时才会开始。</p>
+        <button id="start">进入迷宫</button>
+      </section>
+
+      <section id="quiz" class="panel hidden" aria-label="斯芬克斯谜题">
+        <h2>斯芬克斯的谜题</h2>
+        <p id="quiz-question">谜题文本</p>
+        <div id="quiz-options" class="quiz-options"></div>
+      </section>
+
+      <section id="result" class="panel hidden">
+        <h2 id="result-title">胜利</h2>
+        <p id="result-copy">你穿过了迷宫。</p>
+        <button id="restart">再试一次</button>
+      </section>
+
+      <div id="screen-effects" aria-hidden="true">
+        <div id="snare-vines"></div>
+        <div id="dementor-frost"></div>
+        <div id="damage-flash"></div>
+      </div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+    <script src="./src/main.js"></script>
+  </body>
+</html>
