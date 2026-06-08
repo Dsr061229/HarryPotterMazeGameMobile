@@ -5,7 +5,7 @@ const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'data.json');
+const DATA_FILE = process.env.DATA_DIR ? path.join(process.env.DATA_DIR, 'data.json') : path.join(__dirname, 'data.json');
 const ADMIN_PW_HASH = '$2a$10$18ET.WigOb24EdGlSHQ/Z.Nf2G7S50reC.LF6xUaEgqWhg225oh8C'; // 061229
 
 app.use(express.json());
