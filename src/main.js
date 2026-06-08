@@ -27,20 +27,19 @@ var btnScroll = document.querySelector("#btn-scroll");
 if (startButton) startButton.addEventListener("click", function () { startGame(); });
 if (restartButton) restartButton.addEventListener("click", function () { resultPanel.classList.add("hidden"); startGame(); });
 
-// ===== 用户系统 (Supabase) =====
-var currentUser = null, isAdmin = false, supabase = null;
-var SUPABASE_URL = "https://psadnnnoyeqinuixwumj.supabase.co";
-var SUPABASE_ANON_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
+// ===== 用户系统 (Supabase REST API) =====
+var currentUser = null, isAdmin = false;
+var SUPABASE_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1";
+var SUPABASE_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
 var ADMIN_PW = "061229";
 
-function initSupabase() {
-  if (typeof supabase !== 'undefined' && supabase) return;
-  if (typeof window.supabase !== 'undefined' && window.supabase.createClient) {
-    supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }
+function dbFetch(method, path, body) {
+  var headers = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY };
+  if (body) { headers["Content-Type"] = "application/json"; headers["Prefer"] = "return=representation"; }
+  return fetch(SUPABASE_URL + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.headers.get("content-length") === "0" ? null : r.json(); });
 }
 
-// 通用数据库操作（离线兜底 localStorage）
 function localDB() { try { return JSON.parse(localStorage.getItem("maze_game_db")) || { users: {} } } catch (e) { return { users: {} } } }
 function localSave(db) { localStorage.setItem("maze_game_db", JSON.stringify(db)) }
 function localRecord(won, score) {
@@ -69,28 +68,27 @@ if(btnStats)btnStats.addEventListener("click",function(e){e.stopPropagation();sh
 if(btnAdmin)btnAdmin.addEventListener("click",function(e){e.stopPropagation();showAdmin()});
 
 function doAuth(){
-  initSupabase();
   var uid=(authUidEl.value||"").trim();
   if(!uid){authMsg.textContent="请输入游戏ID";return}
   if(!/^[a-zA-Z0-9]+$/.test(uid)){authMsg.textContent="只能使用英文字母和数字";return}
   if(uid.length<2){authMsg.textContent="ID至少2个字符";return}
   if(uid==="Dsr"){var pw=prompt("管理员密码:");if(pw===ADMIN_PW){isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("管理员登录成功",2);return}else{authMsg.textContent="密码错误";return}}
-  if(supabase){supabase.from("users").select("*").eq("uid",uid).single().then(function(r){if(r.data&&r.data.banned){authMsg.textContent="该账号已被禁用";return}if(!r.data){supabase.from("users").insert({uid:uid,wins:0,losses:0,total_score:0,banned:false}).then(function(){finishAuth(uid)})}else{finishAuth(uid)}}).catch(function(e){fallbackAuth(uid)})}else{fallbackAuth(uid)}}
+  dbFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(r){var u=(r&&r.length)?r[0]:null;if(u&&u.banned){authMsg.textContent="该账号已被禁用";return}if(!u){dbFetch("POST","/users",{uid:uid,wins:0,losses:0,total_score:0,banned:false}).then(function(){finishAuth(uid)}).catch(function(){fallbackAuth(uid)})}else{finishAuth(uid)}}).catch(function(e){fallbackAuth(uid)})}
 function finishAuth(uid){isAdmin=false;currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("欢迎回来，"+uid+"！",2)}
 function fallbackAuth(uid){var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
 function recordGameResult(won,score){
   if(!currentUser||isAdmin)return;
-  initSupabase();
-  if(supabase){supabase.from("users").select("wins,losses,total_score").eq("uid",currentUser).single().then(function(r){if(r.data){var w=r.data.wins,l=r.data.losses,s=r.data.total_score+(score||0);if(won)w++;else l++;supabase.from("users").update({wins:w,losses:l,total_score:s}).eq("uid",currentUser).then(function(){})}}).catch(function(){localRecord(won,score)})}else{localRecord(won,score)}}
+  dbFetch("GET","/users?select=wins,losses,total_score&uid=eq."+encodeURIComponent(currentUser)).then(function(r){if(r&&r.length){var u=r[0],w=u.wins,l=u.losses,s=u.total_score+(score||0);if(won)w++;else l++;dbFetch("PATCH","/users?uid=eq."+encodeURIComponent(currentUser),{wins:w,losses:l,total_score:s}).catch(function(){})}}).catch(function(){localRecord(won,score)});
+}
 function showStats(){
   if(!currentUser){alert("请先登录");return}
-  initSupabase();
-  if(supabase){supabase.from("users").select("*").eq("uid",currentUser).single().then(function(r){var u=r.data||{};myStats.innerHTML="<p>ID: "+currentUser+"</p><p>胜利: "+(u.wins||0)+" 场</p><p>失败: "+(u.losses||0)+" 场</p><p>总积分: "+(u.total_score||0)+"</p>"}).catch(function(){myStats.innerHTML="<p>ID: "+currentUser+" (离线)</p>"});supabase.from("users").select("uid,wins,total_score").not("banned","eq",true).order("total_score",{ascending:false}).limit(20).then(function(r){var html="";if(r.data){for(var i=0;i<r.data.length;i++){var d=r.data[i];html+="<div><span>"+(i+1)+". "+d.uid+" ("+d.wins+"胜)</span><span>"+d.total_score+"分</span></div>"}}leaderboard.innerHTML=html||"暂无数据"}).catch(function(){leaderboard.innerHTML="排行榜暂不可用"})}else{var db=localDB(),u=db.users[currentUser]||{};myStats.innerHTML="<p>ID: "+currentUser+"(本地)</p><p>胜利: "+(u.wins||0)+"</p>";leaderboard.innerHTML="离线模式"}statsPanel.classList.remove("hidden")}
+  dbFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(currentUser)).then(function(r){var u=(r&&r.length)?r[0]:{};myStats.innerHTML="<p>ID: "+currentUser+"</p><p>胜利: "+(u.wins||0)+" 场</p><p>失败: "+(u.losses||0)+" 场</p><p>总积分: "+(u.total_score||0)+"</p>"}).catch(function(){myStats.innerHTML="<p>ID: "+currentUser+" (离线)</p>"});
+  dbFetch("GET","/users?select=uid,wins,total_score&banned=eq.false&order=total_score.desc&limit=20").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++)html+="<div><span>"+(i+1)+". "+r[i].uid+" ("+r[i].wins+"胜)</span><span>"+r[i].total_score+"分</span></div>"}leaderboard.innerHTML=html||"暂无数据"}).catch(function(){leaderboard.innerHTML="排行榜暂不可用"});statsPanel.classList.remove("hidden")}
 function showAdmin(){
-  if(!isAdmin)return;initSupabase();
-  if(supabase){supabase.from("users").select("*").order("created_at",{ascending:true}).then(function(r){var html="";if(r.data){for(var i=0;i<r.data.length;i++){var u=r.data[i];html+="<div><span>"+u.uid+" (赢"+(u.wins||0)+" 输"+(u.losses||0)+" "+(u.total_score||0)+"分)"+(u.banned?" [已禁]":"")+"</span><span>";if(!u.banned)html+="<button class='btn-ban' onclick=\"toggleBan('"+u.uid+"')\">禁用</button>";else html+="<button onclick=\"toggleBan('"+u.uid+"')\">解禁</button>";html+="<button class='btn-del' onclick=\"removeUser('"+u.uid+"')\">删除</button></span></div>"}}adminUsers.innerHTML=html||"暂无用户";adminPanel.classList.remove("hidden")}).catch(function(){alert("无法连接数据库")})}else{alert("数据库未连接，请刷新重试")}}
-function toggleBan(uid){if(!isAdmin)return;initSupabase();supabase.from("users").select("banned").eq("uid",uid).single().then(function(r){var nb=!r.data.banned;supabase.from("users").update({banned:nb}).eq("uid",uid).then(function(){showAdmin()})}).catch(function(){var db=localDB();if(db.users[uid]){db.users[uid].banned=!db.users[uid].banned;localSave(db)}showAdmin()})}
-function removeUser(uid){if(!isAdmin)return;if(!confirm("确定删除用户 "+uid+" 吗？"))return;initSupabase();supabase.from("users").delete().eq("uid",uid).then(function(){showAdmin()}).catch(function(){var db=localDB();delete db.users[uid];localSave(db);showAdmin()})}
+  if(!isAdmin)return;
+  dbFetch("GET","/users?select=*&order=created_at.asc").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++){var u=r[i];html+="<div><span>"+u.uid+" (赢"+(u.wins||0)+" 输"+(u.losses||0)+" "+(u.total_score||0)+"分)"+(u.banned?" [已禁]":"")+"</span><span>";if(!u.banned)html+="<button class='btn-ban' onclick=\"toggleBan('"+u.uid+"')\">禁用</button>";else html+="<button onclick=\"toggleBan('"+u.uid+"')\">解禁</button>";html+="<button class='btn-del' onclick=\"removeUser('"+u.uid+"')\">删除</button></span></div>"}}adminUsers.innerHTML=html||"暂无用户";adminPanel.classList.remove("hidden")}).catch(function(){alert("无法连接数据库")})}
+function toggleBan(uid){if(!isAdmin)return;dbFetch("GET","/users?select=banned&uid=eq."+encodeURIComponent(uid)).then(function(r){var nb=!(r&&r.length&&r[0].banned);dbFetch("PATCH","/users?uid=eq."+encodeURIComponent(uid),{banned:nb}).then(function(){showAdmin()})}).catch(function(){var db=localDB();if(db.users[uid]){db.users[uid].banned=!db.users[uid].banned;localSave(db)}showAdmin()})}
+function removeUser(uid){if(!isAdmin)return;if(!confirm("确定删除用户 "+uid+" 吗？"))return;dbFetch("DELETE","/users?uid=eq."+encodeURIComponent(uid)).then(function(){showAdmin()}).catch(function(){var db=localDB();delete db.users[uid];localSave(db);showAdmin()})}
 
 // ===== 核心常量 =====
 var CELL=4,PLAYER_RADIUS=0.72,PLAYER_HEIGHT=1.7;
