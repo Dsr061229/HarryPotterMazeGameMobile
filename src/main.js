@@ -27,17 +27,21 @@ var btnScroll = document.querySelector("#btn-scroll");
 if (startButton) startButton.addEventListener("click", function () { startGame(); });
 if (restartButton) restartButton.addEventListener("click", function () { resultPanel.classList.add("hidden"); startGame(); });
 
-// ===== 用户系统 (Supabase REST API) =====
-var currentUser = null, isAdmin = false;
-var SUPABASE_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1";
-var SUPABASE_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
-var ADMIN_PW = "061229";
+// ===== 用户系统 (Express API) =====
+var currentUser = null, isAdmin = false, adminToken = null;
+var API_URL = (location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1") 
+  ? "http://localhost:8080" 
+  : "https://harrypotter-maze-game.fly.dev";
 
-function dbFetch(method, path, body) {
-  var headers = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY };
-  if (body) { headers["Content-Type"] = "application/json"; headers["Prefer"] = "return=representation"; }
-  return fetch(SUPABASE_URL + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined })
-    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.headers.get("content-length") === "0" ? null : r.json(); });
+function apiFetch(method, path, body) {
+  var headers = { "Content-Type": "application/json" };
+  if (adminToken) headers["x-admin-token"] = adminToken;
+  return fetch(API_URL + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { 
+      if (!r.ok) return r.json().then(function(err) { throw new Error(err.error || r.status.toString()) });
+      var cl = r.headers.get("content-length");
+      return cl === "0" ? null : r.json(); 
+    });
 }
 
 function localDB() { try { return JSON.parse(localStorage.getItem("maze_game_db")) || { users: {} } } catch (e) { return { users: {} } } }
@@ -45,9 +49,9 @@ function localSave(db) { localStorage.setItem("maze_game_db", JSON.stringify(db)
 function localRecord(won, score) {
   if (!currentUser) return;
   var db = localDB(), u = db.users[currentUser];
-  if (!u) { u = { wins: 0, losses: 0, totalScore: 0, createdAt: Date.now(), banned: false }; db.users[currentUser] = u }
+  if (!u) { u = { wins: 0, losses: 0, totalScore: 0, rankScore: 0, lastHealth: 100, createdAt: Date.now(), banned: false }; db.users[currentUser] = u }
   if (won) u.wins++; else u.losses++;
-  u.totalScore += score; localSave(db);
+  u.totalScore += score; u.rankScore = u.rankScore || 0; u.rankScore += score + (won?500:0) + (u.lastHealth||0); localSave(db);
 }
 
 
@@ -72,23 +76,29 @@ function doAuth(){
   if(!uid){authMsg.textContent="请输入游戏ID";return}
   if(!/^[a-zA-Z0-9]+$/.test(uid)){authMsg.textContent="只能使用英文字母和数字";return}
   if(uid.length<2){authMsg.textContent="ID至少2个字符";return}
-  if(uid==="Dsr"){var pw=prompt("管理员密码:");if(pw===ADMIN_PW){isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("管理员登录成功",2);return}else{authMsg.textContent="密码错误";return}}
-  dbFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(r){var u=(r&&r.length)?r[0]:null;if(u&&u.banned){authMsg.textContent="该账号已被禁用";return}if(!u){dbFetch("POST","/users",{uid:uid,wins:0,losses:0,total_score:0,banned:false}).then(function(){finishAuth(uid)}).catch(function(){fallbackAuth(uid)})}else{finishAuth(uid)}}).catch(function(e){fallbackAuth(uid)})}
+  if(uid==="Dsr"){var pw=prompt("管理员密码:");if(!pw){authMsg.textContent="请输入密码";return}
+    apiFetch("POST","/api/admin/login",{uid:"Dsr",password:pw}).then(function(r){
+      isAdmin=true;currentUser="Dsr";adminToken=r.token;
+      btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");
+      rulesPanel.classList.remove("hidden");setMessage("管理员登录成功",2);
+    }).catch(function(e){authMsg.textContent="密码错误";});return}
+  apiFetch("POST","/api/auth",{uid:uid}).then(function(r){if(r.user&&r.user.banned){authMsg.textContent="该账号已被禁用";return}finishAuth(uid)}).catch(function(e){var msg=e.message||"";if(msg.indexOf("禁用")>=0){authMsg.textContent="该账号已被禁用"}else{fallbackAuth(uid)}})}
 function finishAuth(uid){isAdmin=false;currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("欢迎回来，"+uid+"！",2)}
-function fallbackAuth(uid){var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
-function recordGameResult(won,score){
+function fallbackAuth(uid){var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
+function recordGameResult(won,score,endHealth){
   if(!currentUser||isAdmin)return;
-  dbFetch("GET","/users?select=wins,losses,total_score&uid=eq."+encodeURIComponent(currentUser)).then(function(r){if(r&&r.length){var u=r[0],w=u.wins,l=u.losses,s=u.total_score+(score||0);if(won)w++;else l++;dbFetch("PATCH","/users?uid=eq."+encodeURIComponent(currentUser),{wins:w,losses:l,total_score:s}).catch(function(){})}}).catch(function(){localRecord(won,score)});
+  var hp=endHealth!==undefined?Math.max(0,Math.ceil(endHealth)):0;
+  apiFetch("POST","/api/result",{uid:currentUser,won:won,score:score||0,health:hp}).catch(function(){localRecord(won,score)});
 }
 function showStats(){
   if(!currentUser){alert("请先登录");return}
-  dbFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(currentUser)).then(function(r){var u=(r&&r.length)?r[0]:{};myStats.innerHTML="<p>ID: "+currentUser+"</p><p>胜利: "+(u.wins||0)+" 场</p><p>失败: "+(u.losses||0)+" 场</p><p>总积分: "+(u.total_score||0)+"</p>"}).catch(function(){myStats.innerHTML="<p>ID: "+currentUser+" (离线)</p>"});
-  dbFetch("GET","/users?select=uid,wins,total_score&banned=eq.false&order=total_score.desc&limit=20").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++)html+="<div><span>"+(i+1)+". "+r[i].uid+" ("+r[i].wins+"胜)</span><span>"+r[i].total_score+"分</span></div>"}leaderboard.innerHTML=html||"暂无数据"}).catch(function(){leaderboard.innerHTML="排行榜暂不可用"});statsPanel.classList.remove("hidden")}
+  apiFetch("GET","/api/stats/"+encodeURIComponent(currentUser)).then(function(u){myStats.innerHTML="<p>ID: "+currentUser+"</p><p>胜利: "+(u.wins||0)+" 场</p><p>失败: "+(u.losses||0)+" 场</p><p>总积分: "+(u.total_score||0)+"</p><p>排名分: "+(u.rank_score||0)+"</p>"}).catch(function(){myStats.innerHTML="<p>ID: "+currentUser+" (离线)</p>"});
+  apiFetch("GET","/api/leaderboard").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++)html+="<div><span>"+(i+1)+". "+r[i].uid+" ("+r[i].wins+"胜)</span><span>"+(r[i].rank_score||r[i].total_score||0)+"分</span></div>"}leaderboard.innerHTML=html||"暂无数据"}).catch(function(){leaderboard.innerHTML="排行榜暂不可用"});statsPanel.classList.remove("hidden")}
 function showAdmin(){
   if(!isAdmin)return;
-  dbFetch("GET","/users?select=*&order=created_at.asc").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++){var u=r[i];html+="<div><span>"+u.uid+" (赢"+(u.wins||0)+" 输"+(u.losses||0)+" "+(u.total_score||0)+"分)"+(u.banned?" [已禁]":"")+"</span><span>";if(!u.banned)html+="<button class='btn-ban' onclick=\"toggleBan('"+u.uid+"')\">禁用</button>";else html+="<button onclick=\"toggleBan('"+u.uid+"')\">解禁</button>";html+="<button class='btn-del' onclick=\"removeUser('"+u.uid+"')\">删除</button></span></div>"}}adminUsers.innerHTML=html||"暂无用户";adminPanel.classList.remove("hidden")}).catch(function(){alert("无法连接数据库")})}
-function toggleBan(uid){if(!isAdmin)return;dbFetch("GET","/users?select=banned&uid=eq."+encodeURIComponent(uid)).then(function(r){var nb=!(r&&r.length&&r[0].banned);dbFetch("PATCH","/users?uid=eq."+encodeURIComponent(uid),{banned:nb}).then(function(){showAdmin()})}).catch(function(){var db=localDB();if(db.users[uid]){db.users[uid].banned=!db.users[uid].banned;localSave(db)}showAdmin()})}
-function removeUser(uid){if(!isAdmin)return;if(!confirm("确定删除用户 "+uid+" 吗？"))return;dbFetch("DELETE","/users?uid=eq."+encodeURIComponent(uid)).then(function(){showAdmin()}).catch(function(){var db=localDB();delete db.users[uid];localSave(db);showAdmin()})}
+  apiFetch("GET","/api/admin/users").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++){var u=r[i];html+="<div><span>"+u.uid+" (赢"+(u.wins||0)+" 输"+(u.losses||0)+" 排名"+(u.rank_score||0)+")"+(u.banned?" [已禁]":"")+"</span><span>";if(!u.banned)html+="<button class='btn-ban' onclick=\"toggleBan('"+u.uid+"')\">禁用</button>";else html+="<button onclick=\"toggleBan('"+u.uid+"')\">解禁</button>";html+="<button class='btn-del' onclick=\"removeUser('"+u.uid+"')\">删除</button></span></div>"}}adminUsers.innerHTML=html||"暂无用户";adminPanel.classList.remove("hidden")}).catch(function(){alert("无法连接数据库")})}
+function toggleBan(uid){if(!isAdmin)return;apiFetch("POST","/api/admin/toggleban",{uid:uid}).then(function(){showAdmin()}).catch(function(){var db=localDB();if(db.users[uid]){db.users[uid].banned=!db.users[uid].banned;localSave(db)}showAdmin()})}
+function removeUser(uid){if(!isAdmin)return;if(!confirm("确定删除用户 "+uid+" 吗？"))return;apiFetch("POST","/api/admin/remove",{uid:uid}).then(function(){showAdmin()}).catch(function(){var db=localDB();delete db.users[uid];localSave(db);showAdmin()})}
 
 // ===== 核心常量 =====
 var CELL=4,PLAYER_RADIUS=0.72,PLAYER_HEIGHT=1.7;
@@ -171,7 +181,7 @@ var goldenSnitch={mesh:null,light:null,position:new THREE.Vector3(),velocity:new
 var patronusBeam={active:false,mesh:null,light:null,target:new THREE.Vector3(),origin:new THREE.Vector3(),startTime:0,duration:0.6};
 var blastEnded={mesh:null,light:null,position:new THREE.Vector3(),home:{r:3,c:11},state:"patrol",patrolPhase:0,stunTimer:0,chargeTarget:new THREE.Vector3(),chargeDir:new THREE.Vector3(),hitTimer:0};
 
-var quizData=[{question:"三根魔杖依次闪光：蓝、蓝、金、蓝、蓝、金。下一次金光前还会出现几次蓝光？",options:["2 次","1 次","3 次"],answer:0},{question:"一瓶复方汤剂每分钟翻倍，8 分钟装满坩埚。它在第几分钟装到一半？",options:["第 7 分钟","第 4 分钟","第 6 分钟"],answer:0},{question:"七个波特用复方汤剂伪装，真哈利必须和谁一组来迷惑食死徒？",options:["海格","穆迪","罗恩"],answer:0},{question:"蛇怪的眼睛能直接致死，哈利在密室中用什么武器击败了蛇怪？",options:["格兰芬多宝剑","魔杖","蛇牙"],answer:0},{question:"活点地图的咒语是\"我庄严宣誓我不干好事\"，关闭它的咒语是什么？",options:["恶作剧完毕","咒立停","一切结束"],answer:0},{question:"三强争霸赛第二个项目中，参赛者需要从人鱼手中救回什么？",options:["心爱的人","金蛋","魔法书"],answer:0},{question:"魁地奇比赛中，抓住金色飞贼得多少分？",options:["150 分","100 分","50 分"],answer:0},{question:"伏地魔的七个魂器中，哪一个被藏在霍格沃茨的有求必应屋里？",options:["拉文克劳的冠冕","斯莱特林的挂坠盒","汤姆·里德尔的日记"],answer:0},{question:"死亡圣器不包括以下哪一项？",options:["格兰芬多宝剑","老魔杖","复活石"],answer:0},{question:"小天狼星布莱克在阿兹卡班变成什么动物越狱的？",options:["大黑狗","猫","老鼠"],answer:0},{question:"凤凰社的总部位于哪里？",options:["格里莫广场12号","霍格沃茨","对角巷"],answer:0},{question:"赫敏在一年级时用什么谜题帮助哈利通过倒数第二关？",options:["魔药瓶谜题","棋盘","钥匙"],answer:0}];
+var quizData=[{question:"三根魔杖依次闪光：蓝、蓝、金、蓝、蓝、金。下一次金光前还会出现几次蓝光？",options:["2 次","1 次","3 次"],answer:0},{question:"一瓶复方汤剂每分钟翻倍，8 分钟装满坩埚。它在第几分钟装到一半？",options:["第 4 分钟","第 7 分钟","第 6 分钟"],answer:1},{question:"七个波特用复方汤剂伪装，真哈利必须和谁一组来迷惑食死徒？",options:["穆迪","海格","罗恩"],answer:1},{question:"蛇怪的眼睛能直接致死，哈利在密室中用什么武器击败了蛇怪？",options:["蛇牙","魔杖","格兰芬多宝剑"],answer:2},{question:"活点地图的咒语是\"我庄严宣誓我不干好事\"，关闭它的咒语是什么？",options:["恶作剧完毕","咒立停","一切结束"],answer:0},{question:"三强争霸赛第二个项目中，参赛者需要从人鱼手中救回什么？",options:["魔法书","金蛋","心爱的人"],answer:2},{question:"魁地奇比赛中，抓住金色飞贼得多少分？",options:["50 分","100 分","150 分"],answer:2},{question:"伏地魔的七个魂器中，哪一个被藏在霍格沃茨的有求必应屋里？",options:["拉文克劳的冠冕","斯莱特林的挂坠盒","汤姆·里德尔的日记"],answer:0},{question:"死亡圣器不包括以下哪一项？",options:["老魔杖","格兰芬多宝剑","复活石"],answer:1},{question:"小天狼星布莱克在阿兹卡班变成什么动物越狱的？",options:["老鼠","猫","大黑狗"],answer:2},{question:"凤凰社的总部位于哪里？",options:["霍格沃茨","对角巷","格里莫广场12号"],answer:2},{question:"赫敏在一年级时用什么谜题帮助哈利通过倒数第二关？",options:["棋盘","魔药瓶谜题","钥匙"],answer:1},{question:"哈利波特的魔杖杖芯是什么？",options:["龙心弦","独角兽毛","凤凰尾羽"],answer:2},{question:"霍格沃茨共有几个学院？",options:["3 个","4 个","5 个"],answer:1},{question:"海格第一次带哈利去对角巷是从哪里进入的？",options:["破釜酒吧后院","古灵阁旁边","丽痕书店后面"],answer:0},{question:"纳威·隆巴顿最擅长的魔法科目是什么？",options:["变形术","魔咒学","草药学"],answer:2},{question:"伏地魔的真名是什么？",options:["汤姆·马沃罗·里德尔","汤姆·马修斯·里德尔","汤姆·马库斯·里德尔"],answer:0},{question:"多比最初是谁的家养小精灵？",options:["韦斯莱家族","克拉布家族","马尔福家族"],answer:2},{question:"混血王子是谁？",options:["詹姆·波特","西弗勒斯·斯内普","小天狼星·布莱克"],answer:1},{question:"卢平教授在满月时会变成什么？",options:["摄魂怪","狼人","吸血鬼"],answer:1}];
 
 var wallMaterial=new THREE.MeshStandardMaterial({color:0x1a3522,roughness:0.94});
 var wallTopMaterial=new THREE.MeshStandardMaterial({color:0x2d4f2a,roughness:0.9});
@@ -260,7 +270,7 @@ function canCastPatronus(){if(!sentinel.mesh||sentinel.banished||patronusBeam.ac
 function isReticleOnTarget(tp,rad){var cd=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));cd.normalize();var cp=player.position.clone();cp.y=PLAYER_HEIGHT;var oc=cp.clone().sub(tp);var a=cd.dot(cd),b=2*oc.dot(cd),c=oc.dot(oc)-rad*rad;return b*b-4*a*c>=0}
 function castPatronus(){speakSpell("呼神护卫！");var orig=new THREE.Vector3(player.position.x,PLAYER_HEIGHT*0.7,player.position.z);var tgt=sentinel.position.clone();tgt.y=1.3;var bg=new THREE.CylinderGeometry(0.08,0.15,1,8),bm=new THREE.MeshBasicMaterial({color:0xffdd66,transparent:true,opacity:0.9});var beam=new THREE.Mesh(bg,bm);beam.position.copy(orig);beam.castShadow=false;scene.add(beam);var glow=new THREE.PointLight(0xffdd66,8,18);glow.position.copy(orig);scene.add(glow);var parts=[],pg=new THREE.SphereGeometry(0.06,6,6);for(var i=0;i<12;i++){var p=new THREE.Mesh(pg,bm.clone());p.position.copy(orig);scene.add(p);parts.push(p)}patronusBeam.active=true;patronusBeam.mesh=beam;patronusBeam.light=glow;patronusBeam.particles=parts;patronusBeam.target.copy(tgt);patronusBeam.origin.copy(orig);patronusBeam.startTime=performance.now();playChord([392,523,659,784],0.35,0.07);playTone(1046,0.25,"sine",0.05,0.1)}
 function speakSpell(text){setTimeout(function(){try{if(typeof SpeechSynthesisUtterance!=='undefined'&&'speechSynthesis' in window){window.speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=0.85;u.pitch=1.1;u.volume=0.9;window.speechSynthesis.speak(u)}}catch(e){}},10)}
-function openQuiz(s){currentQuiz=s;gameState="quiz";try{document.exitPointerLock()}catch(e){}var d=quizData[s.quizIndex%quizData.length];quizQuestionEl.textContent=d.question;quizOptionsEl.innerHTML="";d.options.forEach(function(o,i){var b=document.createElement("button");b.type="button";b.textContent=o;b.addEventListener("click",function(){answerQuiz(i)});quizOptionsEl.appendChild(b)});quizPanel.classList.remove("hidden");setMessage("斯芬克斯挡住去路。答题期间迷宫的时间仍在流逝。",3)}
+function openQuiz(s){currentQuiz=s;gameState="quiz";try{document.exitPointerLock()}catch(e){}var d=quizData[s.quizIndex%quizData.length];quizQuestionEl.textContent=d.question;quizOptionsEl.innerHTML="";var order=[];for(var oi=0;oi<d.options.length;oi++)order.push(oi);for(var oi=order.length-1;oi>0;oi--){var j=Math.floor(Math.random()*(oi+1));var t=order[oi];order[oi]=order[j];order[j]=t}order.forEach(function(origIdx){var b=document.createElement("button");b.type="button";b.textContent=d.options[origIdx];b.addEventListener("click",function(){answerQuiz(origIdx)});quizOptionsEl.appendChild(b)});quizPanel.classList.remove("hidden");setMessage("斯芬克斯挡住去路。答题期间迷宫的时间仍在流逝。",3)}
 function answerQuiz(i){if(!currentQuiz)return;var d=quizData[currentQuiz.quizIndex%quizData.length];quizPanel.classList.add("hidden");gameState="playing";try{canvas.requestPointerLock()}catch(e){}if(i===d.answer){currentQuiz.solved=true;if(currentQuiz.mesh)currentQuiz.mesh.visible=false;housePoints+=30;openSphinxPassage(currentQuiz);setMessage("斯芬克斯低头让路，前方的魔法屏障消散。一道栅栏门轰然开启！",3);playChord([523,659,988],0.22,0.055)}else{damage(SPHINX_DMG,"答案错误。斯芬克斯发出尖啸，摄魂怪立刻追来。");sentinel.forcedChaseTimer=9;playNoiseBurst(0.24,0.12)}currentQuiz=null}
 function openSphinxPassage(s){s.barrier.visible=false;if(s.linkedGateIdx!==undefined&&s.linkedGateIdx>=0&&s.linkedGateIdx<gates.length){var g=gates[s.linkedGateIdx];g.open=true;if(g.mesh)g.mesh.visible=false}if(s.isKeySphinx){cupKeyObtained=true;setMessage("斯芬克斯消散时掉落了一把古老的钥匙——火龙杯的封印解除了！",4);playChord([440,554,659,880],0.4,0.08)}}
 function markDeadEnd(){if(gameState!=="playing")return;var cell=player.cell,k=keyOf(cell.r,cell.c);if(markerCells.has(k)){setMessage("这里已经留下红色死胡同标记。",1.4);return}if(!isDeadEndCell(cell.r,cell.c)){setMessage("这里还不是死胡同。把标记留给真正容易迷路的位置。",2);return}var pos=cellToWorld(cell.r,cell.c);var mat=new THREE.MeshStandardMaterial({color:0xff2b2b,emissive:0xff1111,emissiveIntensity:1.2,roughness:0.3});var group=new THREE.Group();var a=new THREE.Mesh(new THREE.BoxGeometry(1.45,0.045,0.18),mat);var b=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.045,1.45),mat);group.add(a,b);group.position.set(pos.x,0.06,pos.z);scene.add(group);markerCells.add(k);deadEndMarks.push({r:cell.r,c:cell.c,mesh:group,mat:mat});housePoints+=10;setMessage("红色十字星已标记：这是一条死胡同。+10 分",2);playTone(196,0.08,"square",0.04)}
@@ -278,7 +288,7 @@ function respawnSnitch(){var h=mapHeight(),w=mapWidth();for(var a=0;a<50;a++){va
 function clearPatronusBeam(){if(patronusBeam.mesh){scene.remove(patronusBeam.mesh);patronusBeam.mesh.geometry.dispose();patronusBeam.mesh.material.dispose()}if(patronusBeam.light)scene.remove(patronusBeam.light);if(patronusBeam.particles){for(var i=0;i<patronusBeam.particles.length;i++){var p=patronusBeam.particles[i];scene.remove(p);p.geometry.dispose();p.material.dispose()}}patronusBeam.active=false;patronusBeam.mesh=null;patronusBeam.light=null;patronusBeam.particles=null}
 function updateHud(){timeEl.textContent=formatTime(timeLeft);healthEl.textContent=""+Math.max(0,Math.ceil(health));wandEl.textContent=Math.round(wandPower*100)+"%";var se=document.querySelector("#score");if(se)se.textContent=""+housePoints;if(deadEndCountEl)deadEndCountEl.textContent=""+deadEndMarks.length;var sf=document.querySelector("#stamina-fill");if(sf){var pct=Math.round(sprintEnergy*100);sf.style.width=pct+"%";sf.className=freeSprintUntil>performance.now()?"boosting":pct<25?"low":""}}
 function damage(amount,text){if(gameState!=="playing"&&gameState!=="quiz")return;health=Math.max(0,health-amount);setMessage(text,1.5);document.body.classList.add("damaged");window.clearTimeout(damage._timer);damage._timer=window.setTimeout(function(){document.body.classList.remove("damaged")},140)}
-function endGame(won,copy){if(gameState!=="playing"&&gameState!=="quiz")return;gameState=won?"won":"lost";try{document.exitPointerLock()}catch(e){}quizPanel.classList.add("hidden");resultTitle.textContent=won?"你夺得了火龙杯":"迷宫吞没了你";var sm=won?" | 学院分: "+housePoints:"";resultCopy.textContent=copy+sm;resultPanel.classList.remove("hidden");document.body.classList.remove("snared","dementor","shake","ceremony");stopAmbientDrone();recordGameResult(won,housePoints);playChord(won?[392,523,659,1046]:[90,72,55],won?0.45:0.55,won?0.07:0.06)}
+function endGame(won,copy){if(gameState!=="playing"&&gameState!=="quiz")return;gameState=won?"won":"lost";try{document.exitPointerLock()}catch(e){}quizPanel.classList.add("hidden");resultTitle.textContent=won?"你夺得了火龙杯":"迷宫吞没了你";var sm=won?" | 学院分: "+housePoints:"";resultCopy.textContent=copy+sm;resultPanel.classList.remove("hidden");document.body.classList.remove("snared","dementor","shake","ceremony");stopAmbientDrone();  recordGameResult(won,housePoints,health);playChord(won?[392,523,659,1046]:[90,72,55],won?0.45:0.55,won?0.07:0.06)}
 function setMessage(text,seconds){if(seconds===void 0)seconds=2;messageEl.textContent=text;messageEl.dataset.temporary="active";window.clearTimeout(setMessage._timer);setMessage._timer=window.setTimeout(function(){messageEl.dataset.temporary="done"},seconds*1000)}
 function isSolidWorldCollideAll(x,z){var samples=[[x-0.5,z-0.5],[x+0.5,z-0.5],[x-0.5,z+0.5],[x+0.5,z+0.5]];return samples.some(function(p){var cell=worldToCell(p[0],p[1]);if(cell.r<0||cell.c<0||cell.r>=mapHeight()||cell.c>=mapWidth())return true;if(solids.has(keyOf(cell.r,cell.c)))return true;if(isGateCell(cell.r,cell.c))return true;if(isQuizBarrierCell(cell.r,cell.c))return true;return!!shiftingWallSolidCache[keyOf(cell.r,cell.c)]})}
 function isWallCell(r,c){if(r<0||c<0||r>=mapHeight()||c>=mapWidth())return true;if(solids.has(keyOf(r,c)))return true;if(isGateCell(r,c))return true;if(isQuizBarrierCell(r,c))return true;return!!shiftingWallSolidCache[keyOf(r,c)]}
