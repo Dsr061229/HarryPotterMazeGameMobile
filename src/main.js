@@ -31,7 +31,7 @@ if (restartButton) restartButton.addEventListener("click", function () { resultP
 var currentUser = null, isAdmin = false, adminToken = null;
 var API_URL = (location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1") 
   ? "http://localhost:8080" 
-  : "https://harrypotter-maze-game.fly.dev";
+  : "";
 
 function apiFetch(method, path, body) {
   var headers = { "Content-Type": "application/json" };
