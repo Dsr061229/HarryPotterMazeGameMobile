@@ -52,7 +52,7 @@ app.post('/api/auth', async function (req, res) {
     }
     var isNew = !user;
     if (isNew) {
-      var newUser = { uid: uid, wins: 0, losses: 0, total_score: 0, rank_score: 0, last_health: 100, banned: false };
+      var newUser = { uid: uid, wins: 0, losses: 0, total_score: 0, banned: false };
       await supaFetch('POST', '/users', newUser);
       user = newUser;
     }
@@ -73,7 +73,7 @@ app.post('/api/admin/login', async function (req, res) {
     if (!valid) return res.status(401).json({ error: '密码错误' });
     var data = await supaFetch('GET', '/users?select=uid&uid=eq.Dsr');
     if (!data || !data.length) {
-      await supaFetch('POST', '/users', { uid: 'Dsr', wins: 0, losses: 0, total_score: 0, rank_score: 0, last_health: 100, banned: false });
+      await supaFetch('POST', '/users', { uid: 'Dsr', wins: 0, losses: 0, total_score: 0, banned: false });
     }
     res.json({ ok: true, token: ADMIN_PW_HASH, uid: 'Dsr' });
   } catch (e) {
@@ -100,12 +100,10 @@ app.post('/api/result', async function (req, res) {
     var hp = health !== undefined ? Math.max(0, Math.ceil(health)) : 0;
     var newWins = won ? (u.wins || 0) + 1 : (u.wins || 0);
     var newLosses = won ? (u.losses || 0) : (u.losses || 0) + 1;
-    var newTotalScore = (u.total_score || 0) + score;
-    var newRankScore = (u.rank_score || u.total_score || 0) + score + (won ? 500 : 0) + hp;
+    var newTotalScore = (u.total_score || 0) + score + (won ? 500 : 0) + hp;
 
     await supaFetch('PATCH', '/users?uid=eq.' + encodeURIComponent(uid), {
-      wins: newWins, losses: newLosses, total_score: newTotalScore,
-      rank_score: newRankScore, last_health: hp
+      wins: newWins, losses: newLosses, total_score: newTotalScore
     });
 
     res.json({ ok: true });
@@ -131,7 +129,7 @@ app.get('/api/stats/:uid', async function (req, res) {
 // 排行榜
 app.get('/api/leaderboard', async function (req, res) {
   try {
-    var data = await supaFetch('GET', '/users?select=uid,wins,total_score,rank_score&banned=eq.false&order=rank_score.desc&limit=20');
+    var data = await supaFetch('GET', '/users?select=uid,wins,total_score&banned=eq.false&order=total_score.desc&limit=20');
     res.json(data || []);
   } catch (e) {
     console.error('/api/leaderboard error:', e.message);
@@ -149,7 +147,7 @@ function checkAdmin(req, res, next) {
 
 app.get('/api/admin/users', checkAdmin, async function (req, res) {
   try {
-    var data = await supaFetch('GET', '/users?select=*&order=rank_score.desc');
+    var data = await supaFetch('GET', '/users?select=*&order=total_score.desc');
     res.json(data || []);
   } catch (e) {
     console.error('/api/admin/users error:', e.message);

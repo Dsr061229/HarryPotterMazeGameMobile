@@ -4,8 +4,6 @@ CREATE TABLE users (
   wins INTEGER DEFAULT 0,
   losses INTEGER DEFAULT 0,
   total_score INTEGER DEFAULT 0,
-  rank_score INTEGER DEFAULT 0,
-  last_health INTEGER DEFAULT 100,
   banned BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
