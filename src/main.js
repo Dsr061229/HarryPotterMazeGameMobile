@@ -27,21 +27,27 @@ var btnScroll = document.querySelector("#btn-scroll");
 if (startButton) startButton.addEventListener("click", function () { startGame(); });
 if (restartButton) restartButton.addEventListener("click", function () { resultPanel.classList.add("hidden"); startGame(); });
 
-// ===== 用户系统 (Express API) =====
-var currentUser = null, isAdmin = false, adminToken = null;
-var API_URL = (location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1") 
+// ===== 用户系统 =====
+var currentUser = null, isAdmin = false;
+var SUPABASE_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1";
+var SUPABASE_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
+var ADMIN_PW = "061229";
+var EXPRESS_API = (location.protocol === "file:" || location.hostname === "localhost" || location.hostname === "127.0.0.1") 
   ? "http://localhost:8080" 
-  : "";
+  : null;
 
-function apiFetch(method, path, body) {
-  var headers = { "Content-Type": "application/json" };
-  if (adminToken) headers["x-admin-token"] = adminToken;
-  return fetch(API_URL + path, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined })
-    .then(function (r) { 
-      if (!r.ok) return r.json().then(function(err) { throw new Error(err.error || r.status.toString()) });
-      var cl = r.headers.get("content-length");
-      return cl === "0" ? null : r.json(); 
-    });
+function dbFetch(method, path, body) {
+  var headers, url;
+  if (EXPRESS_API) {
+    headers = { "Content-Type": "application/json" };
+    url = EXPRESS_API + path;
+  } else {
+    headers = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY };
+    if (body) { headers["Content-Type"] = "application/json"; headers["Prefer"] = "return=representation"; }
+    url = SUPABASE_URL + path;
+  }
+  return fetch(url, { method: method, headers: headers, body: body ? JSON.stringify(body) : undefined })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.headers.get("content-length") === "0" ? null : r.json(); });
 }
 
 function localDB() { try { return JSON.parse(localStorage.getItem("maze_game_db")) || { users: {} } } catch (e) { return { users: {} } } }
@@ -76,29 +82,24 @@ function doAuth(){
   if(!uid){authMsg.textContent="请输入游戏ID";return}
   if(!/^[a-zA-Z0-9]+$/.test(uid)){authMsg.textContent="只能使用英文字母和数字";return}
   if(uid.length<2){authMsg.textContent="ID至少2个字符";return}
-  if(uid==="Dsr"){var pw=prompt("管理员密码:");if(!pw){authMsg.textContent="请输入密码";return}
-    apiFetch("POST","/api/admin/login",{uid:"Dsr",password:pw}).then(function(r){
-      isAdmin=true;currentUser="Dsr";adminToken=r.token;
-      btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");
-      rulesPanel.classList.remove("hidden");setMessage("管理员登录成功",2);
-    }).catch(function(e){authMsg.textContent="密码错误";});return}
-  apiFetch("POST","/api/auth",{uid:uid}).then(function(r){if(r.user&&r.user.banned){authMsg.textContent="该账号已被禁用";return}finishAuth(uid)}).catch(function(e){var msg=e.message||"";if(msg.indexOf("禁用")>=0){authMsg.textContent="该账号已被禁用"}else{fallbackAuth(uid)}})}
+  if(uid==="Dsr"){var pw=prompt("管理员密码:");if(pw===ADMIN_PW){isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("管理员登录成功",2);dbFetch("GET","/users?select=uid&uid=eq.Dsr").then(function(r){if(!r||!r.length){dbFetch("POST","/users",{uid:"Dsr",wins:0,losses:0,total_score:0,rank_score:0,last_health:100,banned:false}).catch(function(){})}}).catch(function(){});return}else{authMsg.textContent="密码错误";return}}
+  dbFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(r){var u=(r&&r.length)?r[0]:null;if(u&&u.banned){authMsg.textContent="该账号已被禁用";return}if(!u){dbFetch("POST","/users",{uid:uid,wins:0,losses:0,total_score:0,rank_score:0,last_health:100,banned:false}).then(function(){finishAuth(uid)}).catch(function(){fallbackAuth(uid)})}else{finishAuth(uid)}}).catch(function(e){fallbackAuth(uid)})}
 function finishAuth(uid){isAdmin=false;currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("欢迎回来，"+uid+"！",2)}
 function fallbackAuth(uid){var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
 function recordGameResult(won,score,endHealth){
   if(!currentUser||isAdmin)return;
   var hp=endHealth!==undefined?Math.max(0,Math.ceil(endHealth)):0;
-  apiFetch("POST","/api/result",{uid:currentUser,won:won,score:score||0,health:hp}).catch(function(){localRecord(won,score)});
+  dbFetch("GET","/users?select=wins,losses,total_score,rank_score&uid=eq."+encodeURIComponent(currentUser)).then(function(r){if(r&&r.length){var u=r[0],w=u.wins,l=u.losses,s=u.total_score+(score||0),rs=(u.rank_score||u.total_score||0)+(score||0)+(won?500:0)+hp;if(won)w++;else l++;dbFetch("PATCH","/users?uid=eq."+encodeURIComponent(currentUser),{wins:w,losses:l,total_score:s,rank_score:rs,last_health:hp}).catch(function(){})}}).catch(function(){localRecord(won,score)});
 }
 function showStats(){
   if(!currentUser){alert("请先登录");return}
-  apiFetch("GET","/api/stats/"+encodeURIComponent(currentUser)).then(function(u){myStats.innerHTML="<p>ID: "+currentUser+"</p><p>胜利: "+(u.wins||0)+" 场</p><p>失败: "+(u.losses||0)+" 场</p><p>总积分: "+(u.total_score||0)+"</p><p>排名分: "+(u.rank_score||0)+"</p>"}).catch(function(){myStats.innerHTML="<p>ID: "+currentUser+" (离线)</p>"});
-  apiFetch("GET","/api/leaderboard").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++)html+="<div><span>"+(i+1)+". "+r[i].uid+" ("+r[i].wins+"胜)</span><span>"+(r[i].rank_score||r[i].total_score||0)+"分</span></div>"}leaderboard.innerHTML=html||"暂无数据"}).catch(function(){leaderboard.innerHTML="排行榜暂不可用"});statsPanel.classList.remove("hidden")}
+  dbFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(currentUser)).then(function(r){var u=(r&&r.length)?r[0]:{};myStats.innerHTML="<p>ID: "+currentUser+"</p><p>胜利: "+(u.wins||0)+" 场</p><p>失败: "+(u.losses||0)+" 场</p><p>总积分: "+(u.total_score||0)+"</p><p>排名分: "+(u.rank_score||0)+"</p>"}).catch(function(){myStats.innerHTML="<p>ID: "+currentUser+" (离线)</p>"});
+  dbFetch("GET","/users?select=uid,wins,total_score,rank_score&banned=eq.false&order=rank_score.desc&limit=20").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++)html+="<div><span>"+(i+1)+". "+r[i].uid+" ("+r[i].wins+"胜)</span><span>"+(r[i].rank_score||r[i].total_score||0)+"分</span></div>"}leaderboard.innerHTML=html||"暂无数据"}).catch(function(){leaderboard.innerHTML="排行榜暂不可用"});statsPanel.classList.remove("hidden")}
 function showAdmin(){
   if(!isAdmin)return;
-  apiFetch("GET","/api/admin/users").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++){var u=r[i];html+="<div><span>"+u.uid+" (赢"+(u.wins||0)+" 输"+(u.losses||0)+" 排名"+(u.rank_score||0)+")"+(u.banned?" [已禁]":"")+"</span><span>";if(!u.banned)html+="<button class='btn-ban' onclick=\"toggleBan('"+u.uid+"')\">禁用</button>";else html+="<button onclick=\"toggleBan('"+u.uid+"')\">解禁</button>";html+="<button class='btn-del' onclick=\"removeUser('"+u.uid+"')\">删除</button></span></div>"}}adminUsers.innerHTML=html||"暂无用户";adminPanel.classList.remove("hidden")}).catch(function(){alert("无法连接数据库")})}
-function toggleBan(uid){if(!isAdmin)return;apiFetch("POST","/api/admin/toggleban",{uid:uid}).then(function(){showAdmin()}).catch(function(){var db=localDB();if(db.users[uid]){db.users[uid].banned=!db.users[uid].banned;localSave(db)}showAdmin()})}
-function removeUser(uid){if(!isAdmin)return;if(!confirm("确定删除用户 "+uid+" 吗？"))return;apiFetch("POST","/api/admin/remove",{uid:uid}).then(function(){showAdmin()}).catch(function(){var db=localDB();delete db.users[uid];localSave(db);showAdmin()})}
+  dbFetch("GET","/users?select=*&order=rank_score.desc").then(function(r){var html="";if(r){for(var i=0;i<r.length;i++){var u=r[i];html+="<div><span>"+u.uid+" (赢"+(u.wins||0)+" 输"+(u.losses||0)+" 排名"+(u.rank_score||0)+")"+(u.banned?" [已禁]":"")+"</span><span>";if(!u.banned)html+="<button class='btn-ban' onclick=\"toggleBan('"+u.uid+"')\">禁用</button>";else html+="<button onclick=\"toggleBan('"+u.uid+"')\">解禁</button>";html+="<button class='btn-del' onclick=\"removeUser('"+u.uid+"')\">删除</button></span></div>"}}adminUsers.innerHTML=html||"暂无用户";adminPanel.classList.remove("hidden")}).catch(function(){alert("无法连接数据库")})}
+function toggleBan(uid){if(!isAdmin)return;dbFetch("GET","/users?select=banned&uid=eq."+encodeURIComponent(uid)).then(function(r){var nb=!(r&&r.length&&r[0].banned);dbFetch("PATCH","/users?uid=eq."+encodeURIComponent(uid),{banned:nb}).then(function(){showAdmin()})}).catch(function(){var db=localDB();if(db.users[uid]){db.users[uid].banned=!db.users[uid].banned;localSave(db)}showAdmin()})}
+function removeUser(uid){if(!isAdmin)return;if(!confirm("确定删除用户 "+uid+" 吗？"))return;dbFetch("DELETE","/users?uid=eq."+encodeURIComponent(uid)).then(function(){showAdmin()}).catch(function(){var db=localDB();delete db.users[uid];localSave(db);showAdmin()})}
 
 // ===== 核心常量 =====
 var CELL=4,PLAYER_RADIUS=0.72,PLAYER_HEIGHT=1.7;
