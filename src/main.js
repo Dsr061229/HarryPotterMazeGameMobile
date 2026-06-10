@@ -139,7 +139,7 @@ if (startButton) startButton.addEventListener("click", function () {
   if(!currentHero&&!isAdmin){setMessage("请先选择难度和角色",2);return}
   overlay.classList.add("hidden");startGame();
 });
-if (restartButton) restartButton.addEventListener("click", function () { resultPanel.classList.add("hidden"); startGame(); });
+if (restartButton) restartButton.addEventListener("click", function () { resultPanel.classList.add("hidden"); overlay.classList.remove("hidden"); setMessage("选择你的难度和勇士，然后再次踏入迷宫！",2); });
 if (btnWeapon) { btnWeapon.addEventListener("pointerdown",function(e){e.preventDefault();e.stopPropagation();useWeapon()}); btnWeapon.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation()}); }
 
 // ===== 用户系统 =====
