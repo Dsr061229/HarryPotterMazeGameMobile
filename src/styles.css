@@ -481,17 +481,6 @@ body.ceremony #game {
 #hud-btns { position: absolute; top: 6px; right: 6px; z-index: 200; display: flex; gap: 4px; }
 .hud-btn { width: 32px; height: 32px; min-height: auto; border-radius: 50%; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4); color: #fff; font-size: 14px; cursor: pointer; opacity: 0.5; padding: 0; line-height: 1; }
 .hud-btn:hover { opacity: 0.9; }
-  position: fixed; top: 6px; right: 6px;
-  z-index: 200; font-size: 18px; background: none; border: none;
-  cursor: pointer; opacity: 0.4; width: auto; min-height: auto;
-}
-#admin-menu-btn:hover { opacity: 0.8; }
-  font-size: 12px;
-  color: #a89a6a;
-  text-align: center;
-  margin: 6px 0 0;
-  font-style: italic;
-}
 
 /* ===== 横屏旋转提示 ===== */
 #rotate-hint {
