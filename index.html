@@ -74,6 +74,7 @@
           <button id="btn-interact" class="mobile-btn mobile-btn--interact">互动</button>
           <button id="btn-mark" class="mobile-btn mobile-btn--mark">标记</button>
           <button id="btn-scroll" class="mobile-btn mobile-btn--scroll">显形</button>
+          <button id="btn-weapon" class="mobile-btn mobile-btn--weapon">武器R</button>
         </div>
       </div>
 
@@ -115,20 +116,56 @@
 
       <section id="overlay" class="panel">
         <h1>暮篱迷宫</h1>
-        <p>
-          穿过古老拱门，踏入三强争霸赛最终的试炼——树篱迷宫。火把照亮狭窄的通道，
-          黑暗仍潜伏在每个转角。聆听火龙杯的圣歌，躲避摄魂怪与炸尾螺，在时间耗尽前找到出口。
-        </p>
-        <div class="controls">
-          <span>左侧滑动 移动</span>
-          <span>右侧滑动 环顾</span>
-          <span>疾跑按钮 冲刺</span>
-          <span>互动按钮 交互/挣脱</span>
-          <span>标记按钮 记录死路</span>
-          <span>卷轴按钮 幽灵路径</span>
+        <p class="lobby-sub">三强争霸赛 · 最终试炼</p>
+
+        <div class="lobby-section">
+          <h3>选择难度</h3>
+          <div class="difficulty-tabs" id="diff-tabs">
+            <button class="diff-btn" data-diff="easy">简单</button>
+            <button class="diff-btn active" data-diff="medium">中档</button>
+            <button class="diff-btn" data-diff="hard">困难</button>
+          </div>
         </div>
-        <p class="ceremony-hint">踏入拱门后，倒计时才会开始。</p>
-        <button id="start">进入迷宫</button>
+
+        <div class="lobby-section">
+          <h3>选择勇士</h3>
+          <div class="hero-cards" id="hero-cards">
+            <div class="hero-card" data-hero="harry">
+              <div class="hero-avatar harry-avatar">⚡</div>
+              <div class="hero-name">哈利·波特</div>
+              <div class="hero-title">格兰芬多找球手</div>
+              <div class="hero-desc">擅长防御黑魔法，守护神咒极强</div>
+              <div class="hero-skill"><b>被动：</b>摄魂怪伤害减免40%</div>
+              <div class="hero-weapon"><b>武器R：</b>格兰芬多宝剑斩击</div>
+            </div>
+            <div class="hero-card" data-hero="cedric">
+              <div class="hero-avatar cedric-avatar">🦡</div>
+              <div class="hero-name">塞德里克·迪戈里</div>
+              <div class="hero-title">赫奇帕奇级长</div>
+              <div class="hero-desc">正直沉稳，耐力与团队协作极强</div>
+              <div class="hero-skill"><b>被动：</b>火把消耗-35%，答错扣血-25%</div>
+              <div class="hero-weapon"><b>武器R：</b>速速禁锢定身咒</div>
+            </div>
+            <div class="hero-card" data-hero="viktor">
+              <div class="hero-avatar viktor-avatar">🦈</div>
+              <div class="hero-name">威克多尔·克鲁姆</div>
+              <div class="hero-title">德姆斯特朗明星</div>
+              <div class="hero-desc">身体素质极强，移动速度+20%</div>
+              <div class="hero-skill"><b>被动：</b>移速20%↑，但答错扣血+20%</div>
+              <div class="hero-weapon"><b>武器R：</b>秘鲁隐身烟雾弹</div>
+            </div>
+            <div class="hero-card" data-hero="fleur">
+              <div class="hero-avatar fleur-avatar">🦋</div>
+              <div class="hero-name">芙蓉·德拉库尔</div>
+              <div class="hero-title">布斯巴顿之花</div>
+              <div class="hero-desc">媚娃血统，感知魔法与药剂学</div>
+              <div class="hero-skill"><b>被动：</b>探照范围+25%，远距感知死路</div>
+              <div class="hero-weapon"><b>道具R：</b>福灵剂排除2个错误答案</div>
+            </div>
+          </div>
+        </div>
+
+        <button id="start" class="btn-enter-maze">确认并踏入迷宫</button>
       </section>
 
       <section id="quiz" class="panel hidden" aria-label="斯芬克斯谜题">

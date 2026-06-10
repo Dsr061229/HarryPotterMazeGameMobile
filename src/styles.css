@@ -590,3 +590,55 @@ body.ceremony #game {
     gap: 4px;
   }
 }
+
+/* ===== 游戏大厅 ===== */
+.lobby-sub { text-align:center; color:#b8b49c; margin-top:-8px; font-size:14px; }
+.lobby-section { margin-bottom:14px; }
+.lobby-section h3 { font-size:14px; color:#d0cba0; margin:0 0 6px; text-align:center; letter-spacing:2px; }
+
+/* 难度选项卡 */
+.difficulty-tabs { display:flex; gap:6px; justify-content:center; }
+.diff-btn {
+  flex:1; max-width:100px; padding:8px 0; border-radius:8px; border:2px solid rgba(238,230,182,0.2);
+  background:rgba(9,14,11,0.5); color:#9a9470; font-size:14px; font-weight:700; cursor:pointer;
+  transition:all 0.2s;
+}
+.diff-btn:hover { border-color:rgba(238,230,182,0.4); color:#d0cba0; }
+.diff-btn.active { border-color:#e0c565; background:rgba(224,197,101,0.18); color:#e0c565; box-shadow:0 0 12px rgba(224,197,101,0.3); }
+
+/* 角色卡片 */
+.hero-cards { display:flex; gap:8px; overflow-x:auto; padding:4px 0; scrollbar-width:none; }
+.hero-cards::-webkit-scrollbar { display:none; }
+.hero-card {
+  flex:0 0 160px; padding:10px 8px; border-radius:12px; border:2px solid rgba(255,255,255,0.08);
+  background:rgba(14,20,17,0.7); text-align:center; cursor:pointer; transition:all 0.25s;
+  backdrop-filter:blur(4px);
+}
+.hero-card:hover { border-color:rgba(224,197,101,0.3); background:rgba(20,28,24,0.8); }
+.hero-card.selected { border-color:#e0c565; background:rgba(224,197,101,0.12); box-shadow:0 0 18px rgba(224,197,101,0.35), inset 0 0 8px rgba(224,197,101,0.08); }
+
+.hero-avatar { width:44px; height:44px; border-radius:50%; margin:0 auto 4px; display:flex; align-items:center; justify-content:center; font-size:22px; }
+.harry-avatar { background:radial-gradient(circle,#8b2020,#4a0f0f); }
+.cedric-avatar { background:radial-gradient(circle,#b8960a,#5a3e08); }
+.viktor-avatar { background:radial-gradient(circle,#2a4a6b,#0f1f33); }
+.fleur-avatar { background:radial-gradient(circle,#6b8fbe,#2a3f5f); }
+
+.hero-name { font-size:13px; font-weight:700; color:#f4f0d8; margin-bottom:2px; }
+.hero-title { font-size:10px; color:#a09878; margin-bottom:4px; }
+.hero-desc { font-size:10px; color:#8a846a; margin-bottom:4px; line-height:1.3; }
+.hero-skill, .hero-weapon { font-size:9px; color:#c0b46a; line-height:1.3; }
+.hero-weapon { color:#a0c0e0; }
+
+.btn-enter-maze {
+  display:block; width:100%; padding:14px; margin-top:4px; border-radius:10px;
+  border:2px solid #e0c565; background:linear-gradient(135deg,#2a3a1e,#1a2818);
+  color:#e0c565; font-size:16px; font-weight:800; cursor:pointer; letter-spacing:3px;
+  text-shadow:0 0 10px rgba(224,197,101,0.4); transition:all 0.25s;
+}
+.btn-enter-maze:hover { background:linear-gradient(135deg,#3a4d2a,#253520); box-shadow:0 0 22px rgba(224,197,101,0.45); }
+
+/* 武器按钮 */
+.mobile-btn--weapon {
+  border-color:rgba(255,180,80,0.5); font-size:11px; width:58px; height:58px;
+}
+.mobile-btn--weapon:active { border-color:rgba(255,180,80,0.9); background:rgba(255,160,40,0.25); box-shadow:0 0 14px rgba(255,160,40,0.4); }
