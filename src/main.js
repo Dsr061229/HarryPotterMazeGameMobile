@@ -42,25 +42,10 @@ var heroConfig = {
     passive:function(dmg,type){if(type==="dementor")return dmg*0.6;return dmg;},
     weaponName:"格兰芬多宝剑", weaponCD:6,
     weapon:function(){
-      if(!sentinel.mesh||sentinel.banished||weaponCooldown>0)return false;
-      var pf=new THREE.Vector3(player.position.x,1.02,player.position.z);
-      var distS=sentinel.position.distanceTo(pf);
-      var hitBE=blastEnded.mesh&&blastEnded.state!=="stunned"&&blastEnded.position.distanceTo(new THREE.Vector3(player.position.x,0.62,player.position.z))<4;
-      if(distS>4.5&&!hitBE)return false;
-      if(distS<=4.5){
-        var dir=pf.clone().sub(sentinel.position).normalize();
-        var knock=new THREE.Vector3(dir.x,0,dir.z).normalize().multiplyScalar(CELL*5);
-        sentinel.position.add(knock);sentinel.mesh.position.copy(sentinel.position);
-        if(sentinel.light)sentinel.light.position.set(sentinel.position.x,1.72,sentinel.position.z);
-        sentinel.forcedChaseTimer=0;sentinel.banished=false;sentinel.banishTimer=0;
-      }
-      if(hitBE){
-        var dirBE=new THREE.Vector3(blastEnded.position.x-player.position.x,0,blastEnded.position.z-player.position.z).normalize().multiplyScalar(CELL*4);
-        blastEnded.position.add(dirBE);blastEnded.mesh.position.copy(blastEnded.position);
-        if(blastEnded.light)blastEnded.light.position.set(blastEnded.position.x,1,blastEnded.position.z);
-        blastEnded.state="stunned";blastEnded.stunTimer=2;
-      }
-      playChord([262,330,392],0.22,0.06);speakSpell("除你武器！");setMessage("格兰芬多宝剑斩击！"+(hitBE?"炸尾螺也被震退了。":""),2);
+      var hit=false;
+      if(sentinel.mesh&&!sentinel.banished){var pf=new THREE.Vector3(player.position.x,1.02,player.position.z);if(sentinel.position.distanceTo(pf)<=4.5){hit=true;var dir=pf.clone().sub(sentinel.position).normalize();var knock=new THREE.Vector3(dir.x,0,dir.z).normalize().multiplyScalar(CELL*5);sentinel.position.add(knock);sentinel.mesh.position.copy(sentinel.position);if(sentinel.light)sentinel.light.position.set(sentinel.position.x,1.72,sentinel.position.z);sentinel.forcedChaseTimer=0;sentinel.banished=false;sentinel.banishTimer=0;}}
+      if(blastEnded.mesh&&blastEnded.state!=="stunned"){var bep=new THREE.Vector3(player.position.x,0.62,player.position.z);if(blastEnded.position.distanceTo(bep)<4){hit=true;var dirBE=new THREE.Vector3(blastEnded.position.x-player.position.x,0,blastEnded.position.z-player.position.z).normalize().multiplyScalar(CELL*4);blastEnded.position.add(dirBE);blastEnded.mesh.position.copy(blastEnded.position);if(blastEnded.light)blastEnded.light.position.set(blastEnded.position.x,1,blastEnded.position.z);blastEnded.state="stunned";blastEnded.stunTimer=2;}}
+      playNoiseBurst(0.08,0.12);playTone(600,0.06,"sawtooth",0.15);playTone(300,0.1,"square",0.1,0.03);speakSpell(hit?"除你武器！":"宝剑挥空……");setMessage(hit?"格兰芬多宝剑斩击！敌人被震退。":"宝剑划破空气，没有命中目标。",2);
       return true;
     }
   },
@@ -70,11 +55,9 @@ var heroConfig = {
     wandDecayMult:0.65,
     weaponName:"速速禁锢", weaponCD:8,
     weapon:function(){
-      if(!sentinel.mesh||sentinel.banished||weaponCooldown>0)return false;
-      var pf=new THREE.Vector3(player.position.x,0.62,player.position.z);
-      if(sentinel.position.distanceTo(pf)>5)return false;
-      sentinel.forcedChaseTimer=0;sentinel._frozen=performance.now()+4000;
-      playChord([330,440,554],0.3,0.06);speakSpell("速速禁锢！");setMessage("速速禁锢！摄魂怪被定身4秒。",2);
+      var hit=false;
+      if(sentinel.mesh&&!sentinel.banished){var pf=new THREE.Vector3(player.position.x,0.62,player.position.z);if(sentinel.position.distanceTo(pf)<=5){hit=true;sentinel.forcedChaseTimer=0;sentinel._frozen=performance.now()+4000;}}
+      playTone(160,0.12,"sawtooth",0.1);playTone(110,0.18,"triangle",0.08,0.04);playNoiseBurst(0.09,0.06);speakSpell(hit?"速速禁锢！":"绳索飞出……");setMessage(hit?"速速禁锢！摄魂怪被定身4秒。":"魔咒飞出，但附近没有目标。",2);
       return true;
     }
   },
@@ -83,12 +66,11 @@ var heroConfig = {
     passive:function(dmg,type){if(type==="sphinx")return dmg*1.2;return dmg;},
     weaponName:"秘鲁隐身烟雾弹", weaponCD:15,
     weapon:function(){
-      if(!sentinel.mesh||weaponCooldown>0)return false;
       if(blastEnded.mesh){blastEnded.state="stunned";blastEnded.stunTimer=3;}
       var smGeo=new THREE.SphereGeometry(0.55,8,8);var smMat=new THREE.MeshBasicMaterial({color:0xcccccc,transparent:true,opacity:0.55});
       for(var si=0;si<12;si++){var sm=new THREE.Mesh(smGeo,smMat.clone());sm.position.copy(player.position);sm.position.y+=0.5+Math.random()*1.5;sm.position.x+=(Math.random()-0.5)*4;sm.position.z+=(Math.random()-0.5)*4;sm.userData={life:2+Math.random()*2,seed:Math.random()*10};scene.add(sm);if(!currentHero._smokeFx)currentHero._smokeFx=[];currentHero._smokeFx.push(sm);}
-      playNoiseBurst(0.5,0.08);speakSpell("烟雾弹！");setMessage("隐身烟雾！3秒内摄魂怪无法察觉你。",2);
       currentHero._vanishUntil=performance.now()+3000;
+      playNoiseBurst(0.5,0.12);playTone(80,0.25,"sawtooth",0.08);playTone(60,0.35,"triangle",0.05,0.1);speakSpell("烟雾弹！");setMessage("隐身烟雾！3秒内摄魂怪无法察觉你。",2);
       return true;
     }
   },
@@ -98,16 +80,19 @@ var heroConfig = {
     lightMult:1.25, deadEndRange:2,
     weaponName:"福灵剂", weaponCD:30,
     weapon:function(){
-      if(gameState!=="quiz"||!currentQuiz||weaponCooldown>0)return false;
-      var d=currentQuiz._data||quizData[currentQuiz.quizIndex%quizData.length];
-      var order=currentQuiz._order||[0,1,2];
-      var btns=quizOptionsEl.querySelectorAll("button");
-      var disabled=0;
-      for(var k=0;k<order.length&&disabled<2;k++){
-        var origIdx=order[k];
-        if(origIdx!==d.answer&&btns[k]){btns[k].style.opacity="0.2";btns[k].style.textDecoration="line-through";btns[k].disabled=true;disabled++;}
+      var worked=false;
+      if(gameState==="quiz"&&currentQuiz){
+        var d=currentQuiz._data||quizData[currentQuiz.quizIndex%quizData.length];
+        var order=currentQuiz._order||[0,1,2];
+        var btns=quizOptionsEl.querySelectorAll("button");
+        var disabled=0;
+        for(var k=0;k<order.length&&disabled<2;k++){
+          var origIdx=order[k];
+          if(origIdx!==d.answer&&btns[k]){btns[k].style.opacity="0.2";btns[k].style.textDecoration="line-through";btns[k].disabled=true;disabled++;}
+        }
+        worked=disabled>0;
       }
-      speakSpell("福灵剂！");setMessage("福灵剂生效！2个错误答案被排除。",3);playChord([523,659,784],0.25,0.05);
+      playTone(1000,0.08,"sine",0.1);playTone(700,0.12,"sine",0.08,0.04);playTone(500,0.16,"triangle",0.06,0.08);speakSpell(worked?"福灵剂！":"还不到时候……");setMessage(worked?"福灵剂生效！2个错误答案被排除。":"福灵剂只有在面对斯芬克斯谜题时才能发挥效果。",3);
       return true;
     }
   }
@@ -384,7 +369,7 @@ function respawnSentinel(){sentinel.banished=false;sentinel.banishTimer=0;sentin
 function updateBlastEnded(dt,t){if(!blastEnded.mesh)return;var pf=new THREE.Vector3(player.position.x,0.62,player.position.z);var dist=blastEnded.position.distanceTo(pf);blastEnded.hitTimer=Math.max(0,blastEnded.hitTimer-dt);if(blastEnded.state==="stunned"){blastEnded.stunTimer-=dt;if(blastEnded.stunTimer<=0)blastEnded.state="patrol"}else if(blastEnded.state==="charge"){var nx=blastEnded.position.clone().addScaledVector(blastEnded.chargeDir,dt*7.5);if(isSolidWorldCollideAll(nx.x,nx.z)||blastEnded.position.distanceTo(blastEnded.chargeTarget)<0.45){blastEnded.state="stunned";blastEnded.stunTimer=2;playNoiseBurst(0.12,0.06)}else{blastEnded.position.copy(nx)}}else{blastEnded.patrolPhase+=dt;var home=cellToWorld(blastEnded.home.r,blastEnded.home.c);blastEnded.position.x=home.x+Math.sin(blastEnded.patrolPhase*0.55)*1.2;blastEnded.position.z=home.z+Math.cos(blastEnded.patrolPhase*0.45)*0.8;if(isSprinting&&dist<10&&hasLineOfSight(blastEnded.position,player.position)){blastEnded.state="charge";blastEnded.chargeTarget.copy(pf);blastEnded.chargeDir.copy(pf).sub(blastEnded.position).normalize();setMessage("炸尾螺听见了疾跑声，正朝声音暴冲！",2);playNoiseBurst(0.16,0.1)}}if(dist<1.15&&blastEnded.hitTimer<=0){blastEnded.hitTimer=1.5;damage(BLAST_DMG,"炸尾螺狠狠撞上你。");blastEnded.state="stunned";blastEnded.stunTimer=2}blastEnded.mesh.position.copy(blastEnded.position);blastEnded.light.position.set(blastEnded.position.x,1,blastEnded.position.z);blastEnded.mesh.rotation.y=Math.atan2(blastEnded.chargeDir.x,blastEnded.chargeDir.z);blastEnded.light.intensity=blastEnded.state==="charge"?3.2+Math.sin(t*18):1.0}
 function updateGameRules(dt){timeLeft-=dt;wandPower=Math.max(WAND_MIN,wandPower-dt*WAND_DECAY*heroWandDecay);var tc=traps.find(function(t){return t.r===player.cell.r&&t.c===player.cell.c});if(tc&&!snare){snare={trap:tc,presses:0,damageTimer:0};tc.mesh.material.emissive.setHex(0x3f0d06);document.body.classList.add("snared");setMessage("魔鬼网缠住了你！快速连续点击互动按钮施展火焰熊熊。",4);playTone(118,0.16,"triangle",0.06);playNoiseBurst(0.24,0.045)}if(snare){snare.damageTimer+=dt;if(snare.damageTimer>=1){snare.damageTimer=0;damage(SNARE_DMG,"魔鬼网勒紧了脚踝，点击互动按钮挣脱："+snare.presses+"/5")}}var cr=shiftingWalls.some(function(w){return isShiftingWallSolid(w)&&w.r===player.cell.r&&w.c===player.cell.c});if(cr)damage(WALL_CRUSH_DMG*dt,"位移树篱从地下升起，正在挤压你。");collectNearbyItems();if(timeLeft<=0)endGame(false,"时间耗尽，被迷宫吞噬。");if(health<=0)endGame(false,"你倒在了黑暗的树篱中。");updateHud()}
 function interact(){if(gameState==="quiz")return;if(gameState!=="playing")return;if(snare){snare.presses+=1;playTone(260+snare.presses*55,0.05,"square",0.05);playNoiseBurst(0.05,0.02);if(snare.presses===1)speakSpell("火焰熊熊！");setMessage("火焰熊熊："+snare.presses+"/5",0.8);if(snare.presses>=5){snare.trap.mesh.material.emissive.setHex(0x220600);snare=null;document.body.classList.remove("snared");setMessage("火光烧断藤蔓，你挣脱了魔鬼网。",2.4);playChord([330,494,740],0.16,0.05)}return}if(canCastPatronus()){castPatronus();return}var cd=distanceToCell(exitCell.r,exitCell.c);if(cd<3.5){if(!cupKeyObtained){setMessage("火龙杯被强大的魔法封印保护着。找到守钥的斯芬克斯才能解锁。",3);return}endGame(true,"你握住火龙杯，蓝白色火焰撕开了迷宫的出口。三强争霸赛的冠军诞生了！");return}var sphinx=sphinxes.find(function(s){return!s.solved&&distanceToCell(s.r,s.c)<2.8});if(sphinx){openQuiz(sphinx);return}setMessage("附近没有可互动的魔法痕迹。卷轴 "+scrollCharges+" 个 | 疾跑 "+Math.round(sprintEnergy*100)+"%",1.5)}
-function useWeapon(){if(gameState!=="playing"&&gameState!=="quiz")return;if(!currentHero||!currentHero.weapon||weaponCooldown>0){if(weaponCooldown>0)setMessage("武器冷却中: "+Math.ceil(weaponCooldown)+"秒",1);return}if(currentHero.weapon()){weaponCooldown=currentHero.weaponCD;}}
+function useWeapon(){if(!currentHero||!currentHero.weapon){setMessage("未选择角色，无法使用武器。",1.5);return}if(weaponCooldown>0){setMessage("武器冷却中: "+Math.ceil(weaponCooldown)+"秒",1);return}if(currentHero.weapon()){weaponCooldown=currentHero.weaponCD;}}
 function canCastPatronus(){if(!sentinel.mesh||sentinel.banished||patronusBeam.active)return false;var pf=new THREE.Vector3(player.position.x,1.02,player.position.z);var dist=sentinel.position.distanceTo(pf);if(dist>10||!hasLineOfSight(player.position,sentinel.position))return false;return isReticleOnTarget(sentinel.position,1.4)}
 function isReticleOnTarget(tp,rad){var cd=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));cd.normalize();var cp=player.position.clone();cp.y=PLAYER_HEIGHT;var oc=cp.clone().sub(tp);var a=cd.dot(cd),b=2*oc.dot(cd),c=oc.dot(oc)-rad*rad;return b*b-4*a*c>=0}
 function castPatronus(){speakSpell("呼神护卫！");var orig=new THREE.Vector3(player.position.x,PLAYER_HEIGHT*0.7,player.position.z);var tgt=sentinel.position.clone();tgt.y=1.3;var bg=new THREE.CylinderGeometry(0.08,0.15,1,8),bm=new THREE.MeshBasicMaterial({color:0xffdd66,transparent:true,opacity:0.9});var beam=new THREE.Mesh(bg,bm);beam.position.copy(orig);beam.castShadow=false;scene.add(beam);var glow=new THREE.PointLight(0xffdd66,8,18);glow.position.copy(orig);scene.add(glow);var parts=[],pg=new THREE.SphereGeometry(0.06,6,6);for(var i=0;i<12;i++){var p=new THREE.Mesh(pg,bm.clone());p.position.copy(orig);scene.add(p);parts.push(p)}patronusBeam.active=true;patronusBeam.mesh=beam;patronusBeam.light=glow;patronusBeam.particles=parts;patronusBeam.target.copy(tgt);patronusBeam.origin.copy(orig);patronusBeam.startTime=performance.now();playChord([392,523,659,784],0.35,0.07);playTone(1046,0.25,"sine",0.05,0.1)}
