@@ -55,7 +55,7 @@ var GAME_BALANCE = {
 
 var heroConfig = {
   harry: {
-    name:"哈利·波特", speed:6.0, hp:100,
+    name:"哈利·波特", speed:5.4, hp:100,
     passive:function(dmg,type){if(type==="dementor")return dmg*0.6;return dmg;},
     weaponName:"格兰芬多宝剑", weaponCD:6,
     weapon:function(){
@@ -67,7 +67,7 @@ var heroConfig = {
     }
   },
   cedric: {
-    name:"塞德里克·迪戈里", speed:6.0, hp:120,
+    name:"塞德里克·迪戈里", speed:5.2, hp:120,
     passive:function(dmg,type){if(type==="sphinx")return dmg*0.75;return dmg;},
     wandDecayMult:0.65,
     weaponName:"速速禁锢", weaponCD:8,
@@ -92,7 +92,7 @@ var heroConfig = {
     }
   },
   fleur: {
-    name:"芙蓉·德拉库尔", speed:6.0, hp:90,
+    name:"芙蓉·德拉库尔", speed:5.5, hp:90,
     passive:function(dmg,type){return dmg;},
     lightMult:1.25, deadEndRange:2,
     weaponName:"福灵剂", weaponCD:30,
@@ -299,7 +299,7 @@ var btnStats=document.querySelector("#btn-stats"),btnAdmin=document.querySelecto
 
 if(authLogin)authLogin.addEventListener("click",doAuth);
 if(authUidEl)authUidEl.addEventListener("keydown",function(e){if(e.key==="Enter")doAuth()});
-if(rulesOk)rulesOk.addEventListener("click",function(){rulesPanel.classList.add("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");setMessage("选择你的难度和勇士，然后踏入迷宫！",3)});
+if(rulesOk)rulesOk.addEventListener("click",function(){rulesPanel.classList.add("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");checkOrientation();setMessage("选择你的难度和勇士，然后踏入迷宫！",3)});
 if(adminClose)adminClose.addEventListener("click",function(){adminPanel.classList.add("hidden")});
 if(statsClose)statsClose.addEventListener("click",function(){statsPanel.classList.add("hidden")});
 if(btnStats)btnStats.addEventListener("click",function(e){e.stopPropagation();showStats()});
@@ -311,10 +311,10 @@ function doAuth(){
   if(!uid){authMsg.textContent="请输入游戏ID";return}
   if(!/^[a-zA-Z0-9]+$/.test(uid)){authMsg.textContent="只能使用英文字母和数字";return}
   if(uid.length<2){authMsg.textContent="ID至少2个字符";return}
-  if(uid==="Dsr"){if(!API_BASE){authMsg.textContent="管理员功能需要先配置后端 API";return}var pw=prompt("管理员密码:");if(pw===null){authMsg.textContent="已取消登录";return}apiFetch("POST","/api/admin/login",{uid:uid,password:pw}).then(function(r){adminToken=r.token;isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();setMessage("管理员登录成功，选择难度后踏入迷宫",2)}).catch(function(e){authMsg.textContent=e.message||"密码错误"});return}
+  if(uid==="Dsr"){if(!API_BASE){authMsg.textContent="管理员功能需要先配置后端 API";return}var pw=prompt("管理员密码:");if(pw===null){authMsg.textContent="已取消登录";return}apiFetch("POST","/api/admin/login",{uid:uid,password:pw}).then(function(r){adminToken=r.token;isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();checkOrientation();setMessage("管理员登录成功，选择难度后踏入迷宫",2)}).catch(function(e){authMsg.textContent=e.message||"密码错误"});return}
   authMsg.textContent="正在连接云端...";
   cloudAuth(uid).then(function(){finishAuth(uid);flushPendingResults()}).catch(function(e){if(isBannedError(e)){authMsg.textContent=e.message;return}fallbackAuth(uid);if(currentUser===uid)setMessage("云端暂不可用，本局会先离线记录，稍后自动补传。",3)})}
-function finishAuth(uid){isAdmin=false;adminToken="";currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();setMessage("欢迎回来，"+uid+"！选择勇士踏入迷宫。",2)}
+function finishAuth(uid){isAdmin=false;adminToken="";currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();checkOrientation();setMessage("欢迎回来，"+uid+"！选择勇士踏入迷宫。",2)}
 function fallbackAuth(uid){var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
 function recordGameResult(won,score,endHealth){
   if(!currentUser)return;
@@ -583,7 +583,9 @@ document.addEventListener("keyup",function(e){keys.delete(e.code);if(e.code==="S
 document.addEventListener("pointerlockchange",function(){if(document.pointerLockElement!==canvas&&gameState==="playing"){setMessage("迷宫仍在低语。点击画面继续探索。",2.5)}});
 document.addEventListener("mousemove",function(e){if(document.pointerLockElement!==canvas||(gameState!=="playing"&&gameState!=="ceremony"))return;yaw-=e.movementX*0.004;pitch-=e.movementY*0.004;pitch=THREE.MathUtils.clamp(pitch,-1.2,1.2)});
 canvas.addEventListener("click",function(){if(gameState==="playing"||gameState==="ceremony"){try{canvas.requestPointerLock()}catch(e){}}});
-function checkOrientation(){var isLandscape=window.innerWidth>window.innerHeight;var hint=document.querySelector("#rotate-hint");if(hint){hint.classList.toggle("show",!isLandscape);hint.classList.toggle("hidden",isLandscape)}}
+function isPanelOpen(el){return el&&!el.classList.contains("hidden")}
+function shouldRequireLandscape(){return !!(currentUser||isAdmin)&&!isPanelOpen(authPanel)&&!isPanelOpen(rulesPanel)}
+function checkOrientation(){var isLandscape=window.innerWidth>window.innerHeight,shouldShow=shouldRequireLandscape()&&!isLandscape;var hint=document.querySelector("#rotate-hint");if(hint){hint.classList.toggle("show",shouldShow);hint.classList.toggle("hidden",!shouldShow)}}
 window.addEventListener("resize",function(){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.2));checkOrientation()});
 window.addEventListener("orientationchange",function(){setTimeout(checkOrientation,300)});
 
