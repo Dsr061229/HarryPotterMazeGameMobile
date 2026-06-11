@@ -14,8 +14,5 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 -- 允许任何人读取
 CREATE POLICY "public_read" ON users FOR SELECT USING (true);
 
--- 允许任何人插入（注册）
-CREATE POLICY "public_insert" ON users FOR INSERT WITH CHECK (true);
-
--- 允许任何人更新（对局记录）
-CREATE POLICY "public_update" ON users FOR UPDATE USING (true);
+-- 写入、更新、删除应由后端使用 SUPABASE_SERVICE_KEY 完成。
+-- 不要给 anon/authenticated 角色开放 INSERT/UPDATE/DELETE，否则排行榜和封禁都可被客户端篡改。
