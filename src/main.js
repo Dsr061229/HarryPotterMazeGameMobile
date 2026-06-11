@@ -145,6 +145,10 @@ if (btnWeapon) { btnWeapon.addEventListener("pointerdown",function(e){e.preventD
 // ===== 用户系统 =====
 var currentUser = null, isAdmin = false, adminToken = "";
 var API_BASE = getInitialApiBase();
+var SUPABASE_REST_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1";
+var SUPABASE_PUBLIC_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
+var REQUEST_TIMEOUT_MS = 6500;
+var RESULT_QUEUE_KEY = "maze_pending_results";
 
 function getInitialApiBase(){
   if(location.protocol==="file:"||location.hostname==="localhost"||location.hostname==="127.0.0.1")return "http://localhost:8080";
@@ -163,7 +167,18 @@ function apiFetch(method,path,body,admin){
   if(!API_BASE)return Promise.reject(new Error("API 未配置，已切换离线模式"));
   var headers={"Content-Type":"application/json"};
   if(admin&&adminToken)headers["x-admin-token"]=adminToken;
-  return fetch(API_BASE+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined}).then(function(r){
+  return fetchJson(API_BASE+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined});
+}
+
+function fetchWithTimeout(url,opts){
+  opts=opts||{};
+  var timer=null,ctrl=null;
+  if(typeof AbortController!=="undefined"){ctrl=new AbortController();opts.signal=ctrl.signal;timer=setTimeout(function(){ctrl.abort()},REQUEST_TIMEOUT_MS)}
+  return fetch(url,opts).then(function(r){if(timer)clearTimeout(timer);return r},function(e){if(timer)clearTimeout(timer);throw e});
+}
+
+function fetchJson(url,opts){
+  return fetchWithTimeout(url,opts).then(function(r){
     return r.text().then(function(text){
       var data=null;
       if(text){try{data=JSON.parse(text)}catch(e){data={error:text}}}
@@ -171,6 +186,18 @@ function apiFetch(method,path,body,admin){
       return data;
     });
   });
+}
+
+function supaFetch(method,path,body){
+  var headers={"apikey":SUPABASE_PUBLIC_KEY,"Authorization":"Bearer "+SUPABASE_PUBLIC_KEY};
+  if(body){headers["Content-Type"]="application/json";headers["Prefer"]="return=representation"}
+  var run=function(){return fetchJson(SUPABASE_REST_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined})};
+  return run().catch(function(e){if(method==="GET")return run();throw e});
+}
+
+function isBannedError(e){
+  var msg=e&&e.message?e.message:"";
+  return msg.indexOf("禁用")!==-1;
 }
 
 function localDB() { try { return JSON.parse(localStorage.getItem("maze_game_db")) || { users: {} } } catch (e) { return { users: {} } } }
@@ -184,6 +211,81 @@ function localRecord(won, score, endHealth) {
   if (won) u.wins++; else u.losses++;
   u.lastHealth = hp;
   u.totalScore += score || 0; u.rankScore = u.rankScore || 0; u.rankScore += (score || 0) + (won?500:0) + hp; localSave(db);
+}
+
+function pendingResults(){try{return JSON.parse(localStorage.getItem(RESULT_QUEUE_KEY))||[]}catch(e){return []}}
+function savePendingResults(q){localStorage.setItem(RESULT_QUEUE_KEY,JSON.stringify(q.slice(-30)))}
+function queueResult(payload){var q=pendingResults();q.push({uid:payload.uid,won:payload.won,score:payload.score,health:payload.health,queuedAt:Date.now()});savePendingResults(q);localRecord(payload.won,payload.score,payload.health)}
+
+function supaAuth(uid){
+  return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(rows){
+    var user=rows&&rows.length?rows[0]:null;
+    if(user&&user.banned)throw new Error("该账号已被禁用");
+    if(user)return {ok:true,user:user};
+    return supaFetch("POST","/users",{uid:uid,wins:0,losses:0,total_score:0,banned:false}).then(function(created){
+      return {ok:true,user:created&&created[0]?created[0]:{uid:uid,wins:0,losses:0,total_score:0,banned:false}};
+    });
+  });
+}
+
+function cloudAuth(uid){
+  return apiFetch("POST","/api/auth",{uid:uid}).catch(function(e){
+    if(isBannedError(e))throw e;
+    return supaAuth(uid);
+  });
+}
+
+function supaRecord(payload){
+  return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(payload.uid)).then(function(rows){
+    var u=rows&&rows.length?rows[0]:null;
+    if(!u)return supaAuth(payload.uid).then(function(){return supaRecord(payload)});
+    if(u.banned)throw new Error("该账号已被禁用");
+    var hp=payload.health!==undefined?Math.ceil(Math.max(0,payload.health)):0;
+    var score=Math.max(0,Math.round(payload.score||0));
+    return supaFetch("PATCH","/users?uid=eq."+encodeURIComponent(payload.uid),{
+      wins:payload.won?(u.wins||0)+1:(u.wins||0),
+      losses:payload.won?(u.losses||0):(u.losses||0)+1,
+      total_score:(u.total_score||0)+score+(payload.won?500:0)+hp
+    });
+  });
+}
+
+function cloudRecord(payload){
+  return apiFetch("POST","/api/result",payload).catch(function(e){
+    if(isBannedError(e))throw e;
+    return supaRecord(payload);
+  });
+}
+
+function cloudStats(uid){
+  return apiFetch("GET","/api/stats/"+encodeURIComponent(uid)).catch(function(e){
+    if(isBannedError(e))throw e;
+    return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(rows){
+      if(!rows||!rows.length)throw new Error("用户不存在");
+      if(rows[0].banned)throw new Error("该账号已被禁用");
+      return rows[0];
+    });
+  });
+}
+
+function cloudLeaderboard(){
+  return apiFetch("GET","/api/leaderboard").catch(function(){
+    return supaFetch("GET","/users?select=uid,wins,total_score&banned=eq.false&order=total_score.desc&limit=20");
+  });
+}
+
+function flushPendingResults(){
+  if(!currentUser||isAdmin)return Promise.resolve();
+  var q=pendingResults();
+  if(!q.length)return Promise.resolve();
+  var kept=[],synced=0,chain=Promise.resolve();
+  q.forEach(function(item){
+    chain=chain.then(function(){
+      if(item.uid!==currentUser){kept.push(item);return null}
+      return cloudRecord(item).then(function(){synced++}).catch(function(e){if(!isBannedError(e))kept.push(item)});
+    });
+  });
+  return chain.then(function(){savePendingResults(kept);if(synced>0)setMessage("已补传 "+synced+" 条离线战绩。",2)});
 }
 
 
@@ -202,6 +304,7 @@ if(adminClose)adminClose.addEventListener("click",function(){adminPanel.classLis
 if(statsClose)statsClose.addEventListener("click",function(){statsPanel.classList.add("hidden")});
 if(btnStats)btnStats.addEventListener("click",function(e){e.stopPropagation();showStats()});
 if(btnAdmin)btnAdmin.addEventListener("click",function(e){e.stopPropagation();showAdmin()});
+if(window.addEventListener)window.addEventListener("online",function(){flushPendingResults()});
 
 function doAuth(){
   var uid=(authUidEl.value||"").trim();
@@ -209,18 +312,21 @@ function doAuth(){
   if(!/^[a-zA-Z0-9]+$/.test(uid)){authMsg.textContent="只能使用英文字母和数字";return}
   if(uid.length<2){authMsg.textContent="ID至少2个字符";return}
   if(uid==="Dsr"){if(!API_BASE){authMsg.textContent="管理员功能需要先配置后端 API";return}var pw=prompt("管理员密码:");if(pw===null){authMsg.textContent="已取消登录";return}apiFetch("POST","/api/admin/login",{uid:uid,password:pw}).then(function(r){adminToken=r.token;isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();setMessage("管理员登录成功，选择难度后踏入迷宫",2)}).catch(function(e){authMsg.textContent=e.message||"密码错误"});return}
-  apiFetch("POST","/api/auth",{uid:uid}).then(function(){finishAuth(uid)}).catch(function(e){if(e.message==="该账号已被禁用"){authMsg.textContent=e.message;return}fallbackAuth(uid)})}
+  authMsg.textContent="正在连接云端...";
+  cloudAuth(uid).then(function(){finishAuth(uid);flushPendingResults()}).catch(function(e){if(isBannedError(e)){authMsg.textContent=e.message;return}fallbackAuth(uid);if(currentUser===uid)setMessage("云端暂不可用，本局会先离线记录，稍后自动补传。",3)})}
 function finishAuth(uid){isAdmin=false;adminToken="";currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();setMessage("欢迎回来，"+uid+"！选择勇士踏入迷宫。",2)}
 function fallbackAuth(uid){var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
 function recordGameResult(won,score,endHealth){
   if(!currentUser)return;
   var hp=endHealth!==undefined?Math.max(0,Math.ceil(endHealth)):0;
-  apiFetch("POST","/api/result",{uid:currentUser,won:won,score:score||0,health:hp}).catch(function(){localRecord(won,score,hp)});
+  var payload={uid:currentUser,won:won===true,score:score||0,health:hp};
+  cloudRecord(payload).then(function(){flushPendingResults()}).catch(function(e){if(isBannedError(e)){setMessage("该账号已被禁用，战绩未记录。",3);return}queueResult(payload)});
 }
 function showStats(){
   if(!currentUser){alert("请先登录");return}
-  apiFetch("GET","/api/stats/"+encodeURIComponent(currentUser)).then(function(u){renderMyStats(u,false)}).catch(function(){renderMyStats(getLocalUser(currentUser)||{uid:currentUser},true)});
-  apiFetch("GET","/api/leaderboard").then(renderLeaderboard).catch(function(){leaderboard.textContent="排行榜暂不可用"});statsPanel.classList.remove("hidden")}
+  flushPendingResults();
+  cloudStats(currentUser).then(function(u){renderMyStats(u,false)}).catch(function(){renderMyStats(getLocalUser(currentUser)||{uid:currentUser},true)});
+  cloudLeaderboard().then(renderLeaderboard).catch(function(){leaderboard.textContent="排行榜暂不可用"});statsPanel.classList.remove("hidden")}
 function showAdmin(){
   if(!isAdmin)return;
   apiFetch("GET","/api/admin/users",null,true).then(function(r){renderAdminUsers(r);adminPanel.classList.remove("hidden")}).catch(function(e){alert(e.message||"无法连接数据库")})}
