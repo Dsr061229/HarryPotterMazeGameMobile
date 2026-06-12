@@ -5,7 +5,10 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check api/index.js && node --check server.js && node --check src/main.js"
+    "check": "node --check api/index.js && node --check server.js && node --check src/main.js && node --check worker/index.mjs",
+    "worker:dev": "npx wrangler dev",
+    "worker:deploy": "npx wrangler deploy",
+    "worker:secret": "npx wrangler secret put"
   },
   "dependencies": {
     "express": "^4.18.2",

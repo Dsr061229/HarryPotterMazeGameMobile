@@ -1,47 +1,69 @@
 # HarryPotterMazeGameMobile
 
-暮篱迷宫移动端 Web 游戏。前端使用原生 JS + Three.js，数据优先走 Express API，再自动降级到 Supabase REST，最后落到 localStorage 离线队列。
+暮篱迷宫移动端 Web 游戏。前端使用原生 JS + Three.js，部署在 GitHub Pages；生产后端使用 Cloudflare Workers 代理 Supabase，长期免费额度足够小规模游戏使用。
 
-## 推荐部署
+## 当前架构
 
 - 前端：GitHub Pages。
-- 数据：Supabase PostgreSQL。
-- 后端：有免费额度的平台都可以，优先 Cloudflare Workers/Pages Functions、Render、Deno Deploy 这类不强依赖信用卡的方案。
+- 后端：Cloudflare Workers，源码在 `worker/index.mjs`。
+- 数据库：Supabase PostgreSQL。
+- 本地兜底：如果 Worker 暂时不可达，战绩先进入 `localStorage.maze_pending_results`，下次登录或打开统计时补传。
 
-当前前端支持三层数据链路：
-
-1. 配置了 `?api=https://your-api.example.com` 时，优先访问后端 `/api/*`。
-2. 后端未配置或超时时，普通玩家登录、战绩、统计、排行榜会尝试 Supabase REST 兜底。
-3. Supabase 也失败时，战绩写入本地 `maze_pending_results` 队列；下次登录或打开统计时自动补传。
-
-管理员登录、封禁、删除仍然只允许通过后端 API。
+生产环境不要让前端直连写 Supabase。Supabase `service_role` key 只能放在 Cloudflare Worker secret 里。
 
 ## 本地运行
 
 1. 安装依赖：`npm install`
-2. 启动 API：`npm start`
+2. 本地 Express API：`SUPABASE_SERVICE_KEY=你的service_role_key npm start`
 3. 打开 `index.html` 或用静态服务器访问前端。
 
-本地前端默认请求 `http://localhost:8080/api/*`。生产环境可用查询参数配置一次后端地址：
+本地前端默认请求 `http://localhost:8080/api/*`。
 
-`https://dsr061229.github.io/HarryPotterMazeGameMobile/?api=https://your-api.example.com`
+## Cloudflare Worker 部署
 
-前端会保存到 `localStorage.maze_api_base`。
+第一次部署：
 
-## 环境变量
+```bash
+npx wrangler login
+npm run worker:secret -- SUPABASE_SERVICE_KEY
+npm run worker:secret -- ADMIN_PASSWORD
+npm run worker:secret -- ADMIN_TOKEN_SECRET
+npm run worker:deploy
+```
 
-- `SUPABASE_URL`：Supabase REST 地址，默认指向当前项目。
-- `SUPABASE_SERVICE_KEY`：服务端写数据库使用，生产环境必须配置。
-- `ADMIN_PW_HASH`：管理员密码 bcrypt hash。
-- `ADMIN_TOKEN_SECRET`：管理员短期 token 签名密钥，生产环境必须配置为独立随机值。
-- `PORT`：API 端口，默认 `8080`。
+说明：
+
+- `SUPABASE_SERVICE_KEY`：Supabase Project Settings 里的 `service_role` key，不要用 anon key。
+- `ADMIN_PASSWORD`：管理员 `Dsr` 登录密码，作为 Cloudflare 加密 secret 保存。
+- `ADMIN_TOKEN_SECRET`：随机长字符串，用于签发管理员和用户短期 token。
+
+部署成功后，Cloudflare 会给出类似：
+
+`https://harry-potter-maze-api.<你的workers子域>.workers.dev`
+
+把这个地址写入 `src/main.js` 的 `DEFAULT_API_BASE`，再推送 GitHub Pages。临时测试也可以访问：
+
+`https://dsr061229.github.io/HarryPotterMazeGameMobile/?api=https://harry-potter-maze-api.<你的workers子域>.workers.dev`
+
+前端会把该地址保存到 `localStorage.maze_api_base`。
 
 ## 数据库权限
 
-执行 `schema.sql` 创建 `users` 表。安全默认是只开放公开读取，注册和写战绩通过后端完成。
+执行 `schema.sql` 创建 `users` 表。推荐 RLS 只开放公开读取，注册、写战绩、封禁和删除全部通过 Worker 使用 `SUPABASE_SERVICE_KEY` 完成。
 
-如果暂时没有稳定后端，又希望 GitHub Pages 直连 Supabase 写入，请在 Supabase SQL Editor 手动执行 `schema.sql` 末尾的“临时直连兜底模式”策略。这个模式适合当前小规模、非敏感数据，但任何人都能用 anon key 写战绩，长期更推荐后端代理。
+如果以前启用过 anon 写入策略，部署 Worker 后建议删除这些策略，避免客户端绕过后端篡改排行榜。
+
+## API 安全
+
+- 普通玩家登录后，Worker 返回用户 token；战绩写入必须带 `x-user-token`。
+- 管理员登录后，Worker 返回短期管理员 token；封禁、删除、用户列表必须带 `x-admin-token`。
+- Worker 使用 CORS allowlist，只允许 GitHub Pages 和本地开发地址调用。
+- 前端不再默认直连 Supabase 写库。
 
 ## 检查
 
-运行 `npm run check` 做基础 JavaScript 语法检查。
+```bash
+npm run check
+```
+
+该命令会检查 Express、本地入口、前端脚本和 Cloudflare Worker 的 JavaScript 语法。

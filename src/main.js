@@ -39,6 +39,9 @@ var GAME_BALANCE = {
   shards: 6,
   traps: 7,
   snitchRespawnMs: 10000,
+  mazeExtraOpenings: { easy: 5, medium: 7, hard: 8 },
+  mazePlazas: { easy: 1, medium: 1, hard: 2 },
+  patronus: { aimRange: 10, assistRange: 7.5, closeRange: 4.2 },
   damage: { dementor: 16, blastEnded: 14, snare: 9, wallCrush: 4 },
   blastEnded: {
     extraOnHard: 1,
@@ -143,10 +146,9 @@ if (restartButton) restartButton.addEventListener("click", function () { resultP
 if (btnWeapon) { btnWeapon.addEventListener("pointerdown",function(e){e.preventDefault();e.stopPropagation();useWeapon()}); btnWeapon.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation()}); }
 
 // ===== 用户系统 =====
-var currentUser = null, isAdmin = false, adminToken = "";
+var currentUser = null, isAdmin = false, adminToken = "", userToken = "";
+var DEFAULT_API_BASE = "";
 var API_BASE = getInitialApiBase();
-var SUPABASE_REST_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1";
-var SUPABASE_PUBLIC_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
 var REQUEST_TIMEOUT_MS = 6500;
 var RESULT_QUEUE_KEY = "maze_pending_results";
 
@@ -159,7 +161,7 @@ function getInitialApiBase(){
       localStorage.setItem("maze_api_base",fromUrl.replace(/\/+$/,""));
       return localStorage.getItem("maze_api_base");
     }
-    return (localStorage.getItem("maze_api_base")||"").replace(/\/+$/,"");
+    return (localStorage.getItem("maze_api_base")||DEFAULT_API_BASE||"").replace(/\/+$/,"");
   }catch(e){return ""}
 }
 
@@ -167,6 +169,7 @@ function apiFetch(method,path,body,admin){
   if(!API_BASE)return Promise.reject(new Error("API 未配置，已切换离线模式"));
   var headers={"Content-Type":"application/json"};
   if(admin&&adminToken)headers["x-admin-token"]=adminToken;
+  if(!admin&&userToken)headers["x-user-token"]=userToken;
   return fetchJson(API_BASE+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined});
 }
 
@@ -188,17 +191,14 @@ function fetchJson(url,opts){
   });
 }
 
-function supaFetch(method,path,body){
-  var headers={"apikey":SUPABASE_PUBLIC_KEY,"Authorization":"Bearer "+SUPABASE_PUBLIC_KEY};
-  if(body){headers["Content-Type"]="application/json";headers["Prefer"]="return=representation"}
-  var run=function(){return fetchJson(SUPABASE_REST_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined})};
-  return run().catch(function(e){if(method==="GET")return run();throw e});
-}
-
 function isBannedError(e){
   var msg=e&&e.message?e.message:"";
   return msg.indexOf("禁用")!==-1;
 }
+
+function userTokenKey(uid){return"maze_user_token_"+uid}
+function saveUserToken(uid,token){userToken=token||"";if(uid&&token)localStorage.setItem(userTokenKey(uid),token)}
+function loadUserToken(uid){userToken=uid?(localStorage.getItem(userTokenKey(uid))||""):"";return userToken}
 
 function localDB() { try { return JSON.parse(localStorage.getItem("maze_game_db")) || { users: {} } } catch (e) { return { users: {} } } }
 function localSave(db) { localStorage.setItem("maze_game_db", JSON.stringify(db)) }
@@ -216,62 +216,26 @@ function localRecord(won, score, endHealth) {
 function pendingResults(){try{return JSON.parse(localStorage.getItem(RESULT_QUEUE_KEY))||[]}catch(e){return []}}
 function savePendingResults(q){localStorage.setItem(RESULT_QUEUE_KEY,JSON.stringify(q.slice(-30)))}
 function queueResult(payload){var q=pendingResults();q.push({uid:payload.uid,won:payload.won,score:payload.score,health:payload.health,queuedAt:Date.now()});savePendingResults(q);localRecord(payload.won,payload.score,payload.health)}
-
-function supaAuth(uid){
-  return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(rows){
-    var user=rows&&rows.length?rows[0]:null;
-    if(user&&user.banned)throw new Error("该账号已被禁用");
-    if(user)return {ok:true,user:user};
-    return supaFetch("POST","/users",{uid:uid,wins:0,losses:0,total_score:0,banned:false}).then(function(created){
-      return {ok:true,user:created&&created[0]?created[0]:{uid:uid,wins:0,losses:0,total_score:0,banned:false}};
-    });
-  });
-}
+function ensureCloudSession(){if(!currentUser||isAdmin)return Promise.resolve();if(loadUserToken(currentUser))return Promise.resolve();return cloudAuth(currentUser).catch(function(){})}
 
 function cloudAuth(uid){
-  return apiFetch("POST","/api/auth",{uid:uid}).catch(function(e){
-    if(isBannedError(e))throw e;
-    return supaAuth(uid);
-  });
-}
-
-function supaRecord(payload){
-  return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(payload.uid)).then(function(rows){
-    var u=rows&&rows.length?rows[0]:null;
-    if(!u)return supaAuth(payload.uid).then(function(){return supaRecord(payload)});
-    if(u.banned)throw new Error("该账号已被禁用");
-    var hp=payload.health!==undefined?Math.ceil(Math.max(0,payload.health)):0;
-    var score=Math.max(0,Math.round(payload.score||0));
-    return supaFetch("PATCH","/users?uid=eq."+encodeURIComponent(payload.uid),{
-      wins:payload.won?(u.wins||0)+1:(u.wins||0),
-      losses:payload.won?(u.losses||0):(u.losses||0)+1,
-      total_score:(u.total_score||0)+score+(payload.won?500:0)+hp
-    });
+  return apiFetch("POST","/api/auth",{uid:uid}).then(function(r){
+    if(r&&r.token)saveUserToken(uid,r.token);
+    return r;
   });
 }
 
 function cloudRecord(payload){
-  return apiFetch("POST","/api/result",payload).catch(function(e){
-    if(isBannedError(e))throw e;
-    return supaRecord(payload);
-  });
+  loadUserToken(payload.uid);
+  return apiFetch("POST","/api/result",payload);
 }
 
 function cloudStats(uid){
-  return apiFetch("GET","/api/stats/"+encodeURIComponent(uid)).catch(function(e){
-    if(isBannedError(e))throw e;
-    return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(rows){
-      if(!rows||!rows.length)throw new Error("用户不存在");
-      if(rows[0].banned)throw new Error("该账号已被禁用");
-      return rows[0];
-    });
-  });
+  return apiFetch("GET","/api/stats/"+encodeURIComponent(uid));
 }
 
 function cloudLeaderboard(){
-  return apiFetch("GET","/api/leaderboard").catch(function(){
-    return supaFetch("GET","/users?select=uid,wins,total_score&banned=eq.false&order=total_score.desc&limit=20");
-  });
+  return apiFetch("GET","/api/leaderboard");
 }
 
 function flushPendingResults(){
@@ -279,6 +243,7 @@ function flushPendingResults(){
   var q=pendingResults();
   if(!q.length)return Promise.resolve();
   var kept=[],synced=0,chain=Promise.resolve();
+  chain=chain.then(ensureCloudSession);
   q.forEach(function(item){
     chain=chain.then(function(){
       if(item.uid!==currentUser){kept.push(item);return null}
@@ -311,11 +276,11 @@ function doAuth(){
   if(!uid){authMsg.textContent="请输入游戏ID";return}
   if(!/^[a-zA-Z0-9]+$/.test(uid)){authMsg.textContent="只能使用英文字母和数字";return}
   if(uid.length<2){authMsg.textContent="ID至少2个字符";return}
-  if(uid==="Dsr"){if(!API_BASE){authMsg.textContent="管理员功能需要先配置后端 API";return}var pw=prompt("管理员密码:");if(pw===null){authMsg.textContent="已取消登录";return}apiFetch("POST","/api/admin/login",{uid:uid,password:pw}).then(function(r){adminToken=r.token;isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();checkOrientation();setMessage("管理员登录成功，选择难度后踏入迷宫",2)}).catch(function(e){authMsg.textContent=e.message||"密码错误"});return}
+  if(uid==="Dsr"){if(!API_BASE){authMsg.textContent="管理员功能需要先配置后端 API";return}var pw=prompt("管理员密码:");if(pw===null){authMsg.textContent="已取消登录";return}apiFetch("POST","/api/admin/login",{uid:uid,password:pw}).then(function(r){adminToken=r.token;userToken="";isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();checkOrientation();setMessage("管理员登录成功，选择难度后踏入迷宫",2)}).catch(function(e){authMsg.textContent=e.message||"密码错误"});return}
   authMsg.textContent="正在连接云端...";
   cloudAuth(uid).then(function(){finishAuth(uid);flushPendingResults()}).catch(function(e){if(isBannedError(e)){authMsg.textContent=e.message;return}fallbackAuth(uid);if(currentUser===uid)setMessage("云端暂不可用，本局会先离线记录，稍后自动补传。",3)})}
 function finishAuth(uid){isAdmin=false;adminToken="";currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();checkOrientation();setMessage("欢迎回来，"+uid+"！选择勇士踏入迷宫。",2)}
-function fallbackAuth(uid){var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
+function fallbackAuth(uid){userToken="";var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
 function recordGameResult(won,score,endHealth){
   if(!currentUser)return;
   var hp=endHealth!==undefined?Math.max(0,Math.ceil(endHealth)):0;
@@ -356,7 +321,7 @@ function generateMaze(){
       for(var d=0;d<ds.length;d++){var dr=ds[d][0],dc=ds[d][1];var nr=r+dr,nc=c+dc;
         if(nr>0&&nr<SIZE-1&&nc>0&&nc<SIZE-1&&grid[nr][nc]==="#"){grid[r+dr/2][c+dc/2]=".";carve(nr,nc)}}}
     carve(1,1);
-    var maxO=12+Math.floor(Math.random()*10),totalO=0,ol=[]; // 收集候选墙
+    var maxO=(GAME_BALANCE.mazeExtraOpenings[currentDifficulty]||7)+Math.floor(Math.random()*3),totalO=0,ol=[]; // 收集候选墙
     for(var wr=2;wr<SIZE-2;wr++)for(var wc=2;wc<SIZE-2;wc++){if(grid[wr][wc]!=="#")continue;var adj=0;
       if(wr>0&&grid[wr-1][wc]===".")adj++;if(wr<SIZE-1&&grid[wr+1][wc]===".")adj++;
       if(wc>0&&grid[wr][wc-1]===".")adj++;if(wc<SIZE-1&&grid[wr][wc+1]===".")adj++;if(adj>=2)ol.push({r:wr,c:wc})}
@@ -367,9 +332,9 @@ function generateMaze(){
     var hd=[[-2,0],[3,0],[0,-2],[0,3]];for(var d=0;d<hd.length;d++){var hr=1+hd[d][0],hc=1+hd[d][1];if(hr>0&&hr<SIZE-1&&hc>0&&hc<SIZE-1){
       var sr2=hd[d][0]===0?0:(hd[d][0]>0?1:-1),sc2=hd[d][1]===0?0:(hd[d][1]>0?1:-1);var cr=1,cc=1;
       while(cr!==hr||cc!==hc){cr+=sr2;cc+=sc2;grid[cr][cc]="."}}}
-    // 广场2-3个
-    var pl=2+Math.floor(Math.random()*2);for(var pi=0;pi<pl;pi++){var pr=4+Math.floor(Math.random()*(SIZE-8)),pc=4+Math.floor(Math.random()*(SIZE-8));
-      for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){var cr2=pr+dr,cc2=pc+dc;if(cr2>0&&cr2<SIZE-1&&cc2>0&&cc2<SIZE-1)grid[cr2][cc2]="."}}
+    // 少量小空地，保留喘息点但避免迷宫过于空旷。
+    var pl=GAME_BALANCE.mazePlazas[currentDifficulty]||1;for(var pi=0;pi<pl;pi++){var pr=4+Math.floor(Math.random()*(SIZE-8)),pc=4+Math.floor(Math.random()*(SIZE-8));
+      for(var dr=-1;dr<=1;dr++)for(var dc=-1;dc<=1;dc++){if(Math.abs(dr)+Math.abs(dc)>1&&Math.random()<0.45)continue;var cr2=pr+dr,cc2=pc+dc;if(cr2>0&&cr2<SIZE-1&&cc2>0&&cc2<SIZE-1)grid[cr2][cc2]="."}}
     // S/E
     startCell={r:1,c:1};grid[1][1]="S";
     var eRegions=[{r:SIZE-2,c:SIZE-2},{r:SIZE-2,c:2},{r:2,c:SIZE-2},{r:SIZE-3,c:Math.floor(SIZE/2)}];
@@ -452,9 +417,9 @@ function initWorld(){solids.clear();var w=mapWidth(),h=mapHeight();
     if(gate1Idx>2&&gate1Idx<mainPath.length-3){var gc1=mainPath[gate1Idx];if(!isWallCell(gc1.r,gc1.c)){addGate(gc1.r,gc1.c,gateGeo)}}
     if(gate2Idx>gate1Idx+6&&gate2Idx<mainPath.length-3){var gc2=mainPath[gate2Idx];if(!isWallCell(gc2.r,gc2.c)){addGate(gc2.r,gc2.c,gateGeo)}}}
   if(mainPath&&mainPath.length>6){placeSphinxForGate(0,0,gate1Idx||mainPath.length,mainPath);if(gate1Idx>0)placeSphinxForGate(1,gate1Idx,mainPath.length,mainPath)}
-  if(sphinxes.length>0){var ki=Math.floor(Math.random()*sphinxes.length);sphinxes[ki].isKeySphinx=true}
-  for(var si=sphinxes.length-1;si>=0;si--){if(!isCellReachable(sphinxes[si].r,sphinxes[si].c)){scene.remove(sphinxes[si].mesh);scene.remove(sphinxes[si].barrier);quizBarriers.splice(quizBarriers.indexOf(sphinxes[si]),1);sphinxes.splice(si,1)}}
-  if(sphinxes.length>0&&!sphinxes.some(function(s){return s.isKeySphinx}))sphinxes[0].isKeySphinx=true;
+  ensureSphinxCoverage(mainPath,gateGeo);
+  for(var si=sphinxes.length-1;si>=0;si--){if(!isCellReachable(sphinxes[si].r,sphinxes[si].c,sphinxes[si]))removeSphinxAt(si)}
+  ensureKeySphinx();
   var de=[[-1,0],[1,0],[0,-1],[0,1]];var startExits=0;for(var d=0;d<4;d++){var nr=startCell.r+de[d][0],nc=startCell.c+de[d][1];if(!isWallCell(nr,nc)&&!isQuizBarrierCell(nr,nc)&&!isGateCell(nr,nc))startExits++}if(startExits<2)cleanBlockedExits(startCell.r,startCell.c);
   var scs=findShiftWallPositions();for(var i=0;i<Math.min(3,scs.length);i++)addShiftingWall(scs[i].r,scs[i].c,(Math.PI*2/3)*i+Math.random()*0.3);
   addTriwizardCup();placeTorches();
@@ -470,9 +435,14 @@ function initWorld(){solids.clear();var w=mapWidth(),h=mapHeight();
 
 function findMainPath(){var h=mapHeight(),w=mapWidth(),vis=[],par=[];for(var r=0;r<h;r++){vis[r]=[];par[r]=[];for(var c=0;c<w;c++){vis[r][c]=false;par[r][c]=null}}var q=[{r:startCell.r,c:startCell.c}];vis[startCell.r][startCell.c]=true;var ds=[[-1,0],[1,0],[0,-1],[0,1]];while(q.length>0){var cur=q.shift();if(cur.r===exitCell.r&&cur.c===exitCell.c){var path=[];var node=cur;while(node){path.unshift(node);node=par[node.r][node.c]}return path}for(var d=0;d<4;d++){var nr=cur.r+ds[d][0],nc=cur.c+ds[d][1];if(nr<0||nr>=h||nc<0||nc>=w||vis[nr][nc])continue;if(solids.has(keyOf(nr,nc)))continue;vis[nr][nc]=true;par[nr][nc]=cur;q.push({r:nr,c:nc})}}return null}
 function findBarrierOffMainPath(r,c,mp){var ds=[[-1,0],[1,0],[0,-1],[0,1]],ps={},h=mapHeight(),w=mapWidth();if(mp)mp.forEach(function(cell){ps[keyOf(cell.r,cell.c)]=true});for(var d=0;d<ds.length;d++){var nr=r+ds[d][0],nc=c+ds[d][1];if(nr>0&&nr<h-1&&nc>0&&nc<w-1&&!isWallCell(nr,nc)){var k=keyOf(nr,nc);if(!ps[k]&&k!==keyOf(startCell.r,startCell.c)&&k!==keyOf(exitCell.r,exitCell.c))return{r:nr,c:nc}}}for(var d=0;d<ds.length;d++){var nr=r+ds[d][0],nc=c+ds[d][1];if(nr>0&&nr<h-1&&nc>0&&nc<w-1&&!isWallCell(nr,nc))return{r:nr,c:nc}}return null}
-function isCellReachable(tr,tc){var h=mapHeight(),w=mapWidth(),vis=[];for(var r=0;r<h;r++){vis[r]=[];for(var c=0;c<w;c++)vis[r][c]=false}var q=[{r:startCell.r,c:startCell.c}];vis[startCell.r][startCell.c]=true;var ds=[[-1,0],[1,0],[0,-1],[0,1]];while(q.length>0){var cur=q.shift();if(cur.r===tr&&cur.c===tc)return true;for(var d=0;d<4;d++){var nr=cur.r+ds[d][0],nc=cur.c+ds[d][1];if(nr<0||nr>=h||nc<0||nc>=w||vis[nr][nc])continue;if(solids.has(keyOf(nr,nc)))continue;if(isQuizBarrierCell(nr,nc))continue;vis[nr][nc]=true;q.push({r:nr,c:nc})}}return false}
+function isCellReachable(tr,tc){var h=mapHeight(),w=mapWidth(),vis=[];for(var r=0;r<h;r++){vis[r]=[];for(var c=0;c<w;c++)vis[r][c]=false}var q=[{r:startCell.r,c:startCell.c}];vis[startCell.r][startCell.c]=true;var ds=[[-1,0],[1,0],[0,-1],[0,1]];while(q.length>0){var cur=q.shift();if(cur.r===tr&&cur.c===tc)return true;for(var d=0;d<4;d++){var nr=cur.r+ds[d][0],nc=cur.c+ds[d][1];if(nr<0||nr>=h||nc<0||nc>=w||vis[nr][nc])continue;if(solids.has(keyOf(nr,nc)))continue;vis[nr][nc]=true;q.push({r:nr,c:nc})}}return false}
 function cleanBlockedExits(sr,sc){var ds=[[-1,0],[1,0],[0,-1],[0,1]];for(var d=0;d<4;d++){var nr=sr+ds[d][0],nc=sc+ds[d][1];if(nr<=0||nr>=mapHeight()-1||nc<=0||nc>=mapWidth()-1)continue;for(var i=quizBarriers.length-1;i>=0;i--){var qb=quizBarriers[i];if(qb.gateCell.r===nr&&qb.gateCell.c===nc){scene.remove(qb.barrier);scene.remove(qb.mesh);quizBarriers.splice(i,1);sphinxes.splice(sphinxes.indexOf(qb),1)}}for(var i=gates.length-1;i>=0;i--){if(gates[i].r===nr&&gates[i].c===nc){gates[i].open=true;if(gates[i].mesh)gates[i].mesh.visible=false}}}}
-function placeSphinxForGate(gi,ps,pe,mp){if(!mp||gi>=gates.length)return;var cands=[],h=mapHeight(),w=mapWidth(),pathSet={};for(var i=ps;i<Math.min(pe,mp.length);i++)pathSet[keyOf(mp[i].r,mp[i].c)]=true;for(var r=2;r<h-2;r++)for(var c=2;c<w-2;c++){if(isWallCell(r,c))continue;var k=keyOf(r,c);if(k===keyOf(startCell.r,startCell.c)||k===keyOf(exitCell.r,exitCell.c))continue;var np=pathSet[k]||false;if(!np){var ds2=[[-1,0],[1,0],[0,-1],[0,1]];for(var d=0;d<4;d++){if(pathSet[keyOf(r+ds2[d][0],c+ds2[d][1])]){np=true;break}}}if(!np)continue;var wc=0;if(isWallCell(r-1,c))wc++;if(isWallCell(r+1,c))wc++;if(isWallCell(r,c-1))wc++;if(isWallCell(r,c+1))wc++;if(wc>=2)cands.push({r:r,c:c})}for(var i=cands.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=cands[i];cands[i]=cands[j];cands[j]=t}for(var ci=0;ci<Math.min(2,cands.length);ci++){var sc=cands[ci];var bc=findBarrierOffMainPath(sc.r,sc.c,mp);if(bc)addSphinx(sc.r,sc.c,bc,Math.floor(Math.random()*quizData.length),gi)}}
+function pathIndexOf(mp,r,c){if(!mp)return-1;for(var i=0;i<mp.length;i++)if(mp[i].r===r&&mp[i].c===c)return i;return-1}
+function isNearExistingSphinx(r,c){return sphinxes.some(function(s){return Math.abs(s.r-r)+Math.abs(s.c-c)<4})}
+function removeSphinxAt(i){var s=sphinxes[i];if(!s)return;if(s.mesh)scene.remove(s.mesh);if(s.barrier)scene.remove(s.barrier);var bi=quizBarriers.indexOf(s);if(bi>=0)quizBarriers.splice(bi,1);sphinxes.splice(i,1)}
+function ensureKeySphinx(){if(!sphinxes.length)return;var best=sphinxes[0],bestScore=-1;sphinxes.forEach(function(s){s.isKeySphinx=false;var g=s.linkedGateIdx!==undefined?gates[s.linkedGateIdx]:null;var score=g?Math.abs(g.r-startCell.r)+Math.abs(g.c-startCell.c):0;if(score>bestScore){best=s;bestScore=score}});best.isKeySphinx=true}
+function ensureSphinxCoverage(mp,gateGeo){if(!mp||mp.length<7)return;if(gates.length===0){var gc=mp[Math.max(3,Math.floor(mp.length*0.62))];if(gc&&!isWallCell(gc.r,gc.c))addGate(gc.r,gc.c,gateGeo)}for(var gi=0;gi<gates.length;gi++){var has=sphinxes.some(function(s){return s.linkedGateIdx===gi});if(!has)placeSphinxForGate(gi,0,mp.length,mp)}if(sphinxes.length===0){var idx=Math.max(2,Math.floor(mp.length*0.42)),cell=mp[idx],gate=gates[0];if(cell&&gate)addSphinx(cell.r,cell.c,{r:gate.r,c:gate.c},Math.floor(Math.random()*quizData.length),0)}ensureKeySphinx()}
+function placeSphinxForGate(gi,ps,pe,mp){if(!mp||gi>=gates.length)return false;var gate=gates[gi],gateIdx=pathIndexOf(mp,gate.r,gate.c);if(gateIdx<0)gateIdx=Math.min(pe,mp.length-2);var from=Math.max(1,ps+1),to=Math.max(from,Math.min(pe-1,gateIdx-1,mp.length-2)),cands=[];for(var i=to;i>=from;i--){var cell=mp[i];if(!cell||isWallCell(cell.r,cell.c))continue;if(cell.r===startCell.r&&cell.c===startCell.c)continue;if(cell.r===exitCell.r&&cell.c===exitCell.c)continue;if(isNearExistingSphinx(cell.r,cell.c))continue;var wc=0;if(isWallCell(cell.r-1,cell.c))wc++;if(isWallCell(cell.r+1,cell.c))wc++;if(isWallCell(cell.r,cell.c-1))wc++;if(isWallCell(cell.r,cell.c+1))wc++;cands.push({r:cell.r,c:cell.c,score:(i/from)+wc*3+Math.random()})}if(!cands.length){for(var j=Math.max(1,gateIdx-4);j>=1;j--){var fb=mp[j];if(fb&&!isWallCell(fb.r,fb.c)&&!isNearExistingSphinx(fb.r,fb.c)){cands.push({r:fb.r,c:fb.c,score:1});break}}}if(!cands.length)return false;cands.sort(function(a,b){return b.score-a.score});var sc=cands[0];addSphinx(sc.r,sc.c,{r:gate.r,c:gate.c},Math.floor(Math.random()*quizData.length),gi);return true}
 function findShiftWallPositionsNearExit(){var cands=[],h=mapHeight(),w=mapWidth();for(var r=2;r<h-2;r++)for(var c=2;c<w-2;c++){if(!isWallCell(r,c))continue;var dE=Math.abs(r-exitCell.r)+Math.abs(c-exitCell.c);if(dE>6)continue;var oa=(!isWallCell(r-1,c)&&!isWallCell(r+1,c))||(!isWallCell(r,c-1)&&!isWallCell(r,c+1));if(oa)cands.push({r:r,c:c})}for(var i=cands.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=cands[i];cands[i]=cands[j];cands[j]=t}return cands.slice(0,2)}
 function findShiftWallPositions(){var cands=[],h=mapHeight(),w=mapWidth();for(var r=2;r<h-2;r++)for(var c=2;c<w-2;c++){if(!isWallCell(r,c))continue;var oa=(!isWallCell(r-1,c)&&!isWallCell(r+1,c))||(!isWallCell(r,c-1)&&!isWallCell(r,c+1));if(oa)cands.push({r:r,c:c})}for(var i=cands.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=cands[i];cands[i]=cands[j];cands[j]=t}return cands.slice(0,4)}
 function placeExtraBlastEnded(path){var pool=(path&&path.length>8?path:[]).filter(function(cell){return Math.abs(cell.r-startCell.r)+Math.abs(cell.c-startCell.c)>6&&Math.abs(cell.r-blastEnded.home.r)+Math.abs(cell.c-blastEnded.home.c)>5&&!isWallCell(cell.r,cell.c)});var cell=pool.length?pool[Math.floor(pool.length*0.72)]:{r:Math.max(2,exitCell.r-2),c:Math.max(2,exitCell.c-2)};blastEnded2.home={r:cell.r,c:cell.c}}
@@ -503,9 +473,10 @@ function setupCeremonyCamera(){var sp=cellToWorld(startCell.r,startCell.c);playe
 function resetGame(placeAtStart){timeLeft=START_TIME;health=heroHP;wandPower=1;sprintEnergy=1;isSprinting=false;dementorAura=false;snare=null;scrollCharges=0;cupKeyObtained=false;freeSprintUntil=0;guideUntil=0;currentQuiz=null;ceremonyAlpha=0;housePoints=0;velocity.set(0,0,0);yaw=-Math.PI/2;pitch=0;markerCells.clear();deadEndMarks.forEach(function(m){if(m.mesh)scene.remove(m.mesh)});deadEndMarks.length=0;sprintToggled=false;keyboardSprint=false;if(btnSprint)btnSprint.classList.remove("active","boosting");if(placeAtStart)setupCeremonyCamera();magicShards.forEach(function(s){s.collected=false;s.mesh.visible=true;s.light.visible=true});traps.forEach(function(t){t.cooldown=0;t.mesh.material.emissive.setHex(0x220600)});sphinxes.forEach(function(s){s.solved=false;s.mesh.visible=true;s.barrier.visible=true});gates.forEach(function(g){g.open=false;g.mesh.visible=true});buffs.forEach(function(b){b.collected=false;b.mesh.visible=true;b.light.visible=true});sentinel.target=0;sentinel.strikeTimer=0;sentinel.forcedChaseTimer=0;sentinel.banished=false;sentinel.banishTimer=0;sentinel2.target=0;sentinel2.strikeTimer=0;sentinel2.forcedChaseTimer=0;sentinel2.banished=false;sentinel2.banishTimer=0;clearPatronusBeam();clearGhostPath();guideUntil=0;if(sentinel.path.length>0&&sentinel.mesh){var f=cellToWorld(sentinel.path[0].r,sentinel.path[0].c);sentinel.position.set(f.x,1.02,f.z);sentinel.mesh.position.copy(sentinel.position);if(sentinel.light)sentinel.light.position.set(f.x,1.7,f.z)}if(sentinel2.path.length>0&&sentinel2.mesh){var f2=cellToWorld(sentinel2.path[0].r,sentinel2.path[0].c);sentinel2.position.set(f2.x,1.02,f2.z);sentinel2.mesh.position.copy(sentinel2.position);if(sentinel2.light)sentinel2.light.position.set(f2.x,1.7,f2.z)}blastEndedPack.forEach(function(be){var bh=cellToWorld(be.home.r,be.home.c);be.position.set(bh.x,0.62,bh.z);be.state="patrol";be.stunTimer=0;be.hitTimer=0;be.listenTimer=0;if(be.mesh){be.mesh.position.copy(be.position);if(be.light)be.light.position.set(bh.x,1,bh.z)}});document.body.classList.remove("snared","dementor","damaged","shake");document.body.classList.add("ceremony");updateHud();setMessage("黑暗笼罩着树篱迷宫。左侧摇杆移动，右侧滑动环顾。",4)}
 
 function animate(now){var dt=Math.min((now-lastTime)/1000,0.05);lastTime=now;var t=now/1000;if(weaponCooldown>0)weaponCooldown=Math.max(0,weaponCooldown-dt);
-  if(currentHero&&currentHero._smokeFx){for(var si=currentHero._smokeFx.length-1;si>=0;si--){var s=currentHero._smokeFx[si];s.userData.life-=dt;s.material.opacity=Math.max(0,s.userData.life/3);s.scale.setScalar(1+(3-s.userData.life)*1.5);if(s.userData.life<=0){scene.remove(s);s.geometry.dispose();s.material.dispose();currentHero._smokeFx.splice(si,1)}}}updateSceneMotion(t,dt);if(gameState==="playing"){updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);blastEndedPack.forEach(function(be){updateBlastEnded(be,dt,t)});updateGameRules(dt,t);updateInteractionPrompt();updateExitAudio(t);updateStateAudio(t)}else if(gameState==="ceremony"){updateCeremony(dt,t);updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);updateStateAudio(t)}else{updateSentinel(dt,t);updateSentinel2(dt,t)}lumos.intensity=8.0+wandPower*8.0+Math.sin(t*0.012)*0.3;lumos.distance=(14+wandPower*16)*heroLightMult;lumos.angle=Math.PI/(4.5/heroLightMult);updateCamera(t);updateJoystick();renderer.render(scene,camera);requestAnimationFrame(animate)}
+  if(currentHero&&currentHero._smokeFx){for(var si=currentHero._smokeFx.length-1;si>=0;si--){var s=currentHero._smokeFx[si];s.userData.life-=dt;s.material.opacity=Math.max(0,s.userData.life/3);s.scale.setScalar(1+(3-s.userData.life)*1.5);if(s.userData.life<=0){scene.remove(s);s.geometry.dispose();s.material.dispose();currentHero._smokeFx.splice(si,1)}}}updateSceneMotion(t,dt);updateExitReveal();if(gameState==="playing"){updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);blastEndedPack.forEach(function(be){updateBlastEnded(be,dt,t)});updateGameRules(dt,t);updateInteractionPrompt();updateExitAudio(t);updateStateAudio(t)}else if(gameState==="ceremony"){updateCeremony(dt,t);updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);updateStateAudio(t)}else{updateSentinel(dt,t);updateSentinel2(dt,t)}lumos.intensity=8.0+wandPower*8.0+Math.sin(t*0.012)*0.3;lumos.distance=(14+wandPower*16)*heroLightMult;lumos.angle=Math.PI/(4.5/heroLightMult);updateCamera(t);updateJoystick();renderer.render(scene,camera);requestAnimationFrame(animate)}
 function updateCeremony(dt,t){ceremonyAlpha+=dt;var moved=Math.hypot(velocity.x,velocity.z)>0.4;if(moved||ceremonyAlpha>2.5){gameState="playing";document.body.classList.remove("ceremony");timeLeft=START_TIME;setMessage("你踏入了迷宫。远处传来火龙杯的低吟……",3.5);playChord([392,523,784],0.32,0.055)}}
 function updateSceneMotion(t,dt){magicShards.forEach(function(s,i){if(!s.mesh)return;s.mesh.rotation.y+=dt*1.8;s.mesh.position.y=1.1+Math.sin(t*2.6+i)*0.14;if(s.light)s.light.intensity=s.collected?0:1.6+Math.sin(t*4+i)*0.3});var cup=scene.getObjectByName("triwizardCup"),cf=scene.getObjectByName("cupFlame"),cl=scene.getObjectByName("cupLight");if(cup)cup.rotation.y+=dt*0.35;if(cf){cf.scale.setScalar(0.85+Math.sin(t*5.5)*0.15);cf.rotation.y+=dt*1.4}if(cl)cl.intensity=3.0+Math.sin(t*3.8)*0.8;var ew=cellToWorld(exitCell.r,exitCell.c);exitParticles.forEach(function(p){if(!p.mesh)return;var a=t*1.4+p.seed;p.mesh.position.x=ew.x+Math.cos(a)*p.radius;p.mesh.position.z=ew.z+Math.sin(a*0.9)*p.radius;p.mesh.position.y=p.height+Math.sin(a*1.7)*0.8;p.mesh.material.opacity=0.42+Math.sin(a*2.2)*0.28});torches.forEach(function(tc){if(!tc.light)return;var fl=0.82+Math.sin(t*12+tc.seed)*0.14+Math.sin(t*19+tc.seed)*0.08;tc.light.intensity=tc.baseIntensity*fl;if(tc.flame){tc.flame.scale.setScalar(0.85+Math.sin(t*14+tc.seed)*0.18);tc.flame.position.y=2.15+Math.sin(t*16+tc.seed)*0.04}});entranceBraziers.forEach(function(b){if(!b.light)return;b.light.intensity=3.0+Math.sin(t*11+b.seed)*0.8+Math.sin(t*17+b.seed)*0.3});fireflies.forEach(function(f){if(!f.mesh)return;f.mesh.position.y+=Math.sin(t*1.4+f.seed)*0.002;f.mesh.position.x+=Math.sin(t*0.8+f.seed)*0.003});shiftingWalls.forEach(function(w){if(!w.mesh)return;w.active=Math.sin(t*0.72+w.phase)>0.35;var ty=w.active?1.7:-4;w.y=w.y+(ty-w.y)*Math.min(dt*6.5,1);if(Math.abs(w.y-ty)<0.05)w.y=ty;w.mesh.position.y=w.y;w.mesh.visible=w.y>-3.7;w.mesh.material.opacity=Math.max(0.18,Math.min(0.92,(w.y+4)/5.7));var solid=w.active&&w.y>-0.2;shiftingWallSolidCache[keyOf(w.r,w.c)]=solid});deadEndMarks.forEach(function(m,i){if(!m.mesh)return;m.mesh.rotation.y+=dt*2.8;if(m.mat)m.mat.emissiveIntensity=0.9+Math.sin(t*7+i)*0.55});if(goldenSnitch.mesh){goldenSnitch.wanderTimer-=dt;if(goldenSnitch.wanderTimer<=0){goldenSnitch.wanderTimer=1.0+Math.random()*2;goldenSnitch.velocity.set((Math.random()-0.5)*8,Math.sin(t*4)*2,(Math.random()-0.5)*8)}var tp=player.position.clone();tp.y=0;var sp=goldenSnitch.position.clone();sp.y=0;var dtp=sp.distanceTo(tp);if(dtp<7){var away=sp.clone().sub(tp).normalize().multiplyScalar(8);goldenSnitch.velocity.lerp(away,dt*5)}var ns=goldenSnitch.position.clone().addScaledVector(goldenSnitch.velocity,dt);var sc=worldToCell(ns.x,ns.z);if(isWallCell(sc.r,sc.c)){goldenSnitch.velocity.x*=-0.8;goldenSnitch.velocity.z*=-0.8}else{goldenSnitch.position.copy(ns)}goldenSnitch.position.y=1.8+Math.sin(t*4)*0.5;goldenSnitch.mesh.position.copy(goldenSnitch.position);goldenSnitch.mesh.rotation.y+=dt*4;if(goldenSnitch.light)goldenSnitch.light.position.copy(goldenSnitch.position)}if(ghostPathMarkers.length>0){var fp=guideUntil>0?Math.max(0,(guideUntil-performance.now())/6000):0;for(var gi=0;gi<ghostPathMarkers.length;gi++){var gm=ghostPathMarkers[gi];if(gm.mat)gm.mat.opacity=0.15+fp*0.55}if(performance.now()>guideUntil){clearGhostPath();guideUntil=0}}buffs.forEach(function(b,i){if(!b.mesh||b.collected)return;b.mesh.rotation.y+=dt*1.4;b.mesh.position.y=0.85+Math.sin(t*2.2+i)*0.12;if(b.light)b.light.intensity=1.4+Math.sin(t*4.5+i)*0.35});if(patronusBeam.active){var el=(performance.now()-patronusBeam.startTime)/1000,prog=Math.min(el/patronusBeam.duration,1);var pos=new THREE.Vector3().lerpVectors(patronusBeam.origin,patronusBeam.target,prog);if(patronusBeam.mesh){patronusBeam.mesh.position.copy(pos);patronusBeam.mesh.lookAt(patronusBeam.target);patronusBeam.mesh.rotation.x+=Math.PI/2;patronusBeam.mesh.scale.y=Math.min(prog*8,8);patronusBeam.mesh.material.opacity=0.9*(1-prog*0.5)}if(patronusBeam.light)patronusBeam.light.position.copy(pos);if(patronusBeam.particles){for(var pi=0;pi<patronusBeam.particles.length;pi++){var pp=patronusBeam.particles[pi];var pProg=Math.min(prog+pi*0.04,1);pp.position.lerpVectors(patronusBeam.origin,patronusBeam.target,pProg);pp.position.x+=(Math.random()-0.5)*0.4;pp.position.y+=(Math.random()-0.5)*0.4;pp.material.opacity=0.8*(1-pProg)}}if(prog>=1){if(patronusTarget&&!patronusTarget.banished){patronusTarget.banished=true;patronusTarget.banishTimer=15+Math.random()*10;housePoints+=50;setMessage("呼神护卫击中了摄魂怪！+50 分。它暂时消散了。",3);playChord([523,784,1046],0.3,0.08);dementorAura=false;document.body.classList.remove("dementor","shake")}patronusTarget=null;clearPatronusBeam()}}}
+function updateExitReveal(){var cup=scene.getObjectByName("triwizardCup"),flame=scene.getObjectByName("cupFlame"),light=scene.getObjectByName("cupLight"),ep=cellToWorld(exitCell.r,exitCell.c),dist=Math.hypot(ep.x-player.position.x,ep.z-player.position.z),near=dist<CELL*3.2,reveal=cupKeyObtained||near||gameState==="won";if(cup){cup.visible=reveal;cup.scale.setScalar(cupKeyObtained?1:0.86)}if(flame&&flame.material){flame.visible=reveal;flame.material.opacity=cupKeyObtained?0.9:0.42}if(light){light.intensity=cupKeyObtained?3.4:near?0.9:0;light.distance=cupKeyObtained?10:5}exitParticles.forEach(function(p){if(!p.mesh)return;p.mesh.visible=cupKeyObtained||dist<CELL*2.6;if(p.mesh.material)p.mesh.material.opacity=Math.min(p.mesh.material.opacity,cupKeyObtained?0.55:0.22)})}
 function updatePlayer(dt){var forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)),right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw)),input=new THREE.Vector3();var mi=getMoveInput();if(mi.z!==0)input.add(forward.clone().multiplyScalar(mi.z));if(mi.x!==0)input.add(right.clone().multiplyScalar(mi.x));if(input.lengthSq()>0)input.normalize();var ws=keys.has("ShiftLeft")||keys.has("ShiftRight")||sprintToggled,fs=performance.now()<freeSprintUntil,cs=ws&&!dementorAura&&input.lengthSq()>0&&(sprintEnergy>0.05||fs);isSprinting=cs;if(btnSprint){if(fs)btnSprint.classList.add("boosting");else btnSprint.classList.remove("boosting")}var sl=snare?0.3:1,sb=cs?SPRINT_SPEED:1,target=input.multiplyScalar(WALK_SPEED*sb*sl);velocity.x=THREE.MathUtils.damp(velocity.x,target.x,12,dt);velocity.z=THREE.MathUtils.damp(velocity.z,target.z,12,dt);if(cs&&!fs&&input.lengthSq()>0.01)sprintEnergy=Math.max(0,sprintEnergy-dt*SPRINT_DRAIN);else if(!cs||input.lengthSq()<0.01)sprintEnergy=Math.min(1,sprintEnergy+dt*SPRINT_RECOVERY);moveWithCollision(velocity.x*dt,velocity.z*dt);player.cell=worldToCell(player.position.x,player.position.z);var moving=Math.hypot(velocity.x,velocity.z)>0.65,fg=isSprinting?260:450;if(moving&&performance.now()-lastFootstep>fg){lastFootstep=performance.now();playFootstep(isSprinting?0.048:0.028)}}
 function moveWithCollision(dx,dz){var nx=player.position.x+dx;if(!checkXCollision(nx,player.position.z,dx))player.position.x=nx;else velocity.x=0;var nz=player.position.z+dz;if(!checkZCollision(player.position.x,nz,dz))player.position.z=nz;else velocity.z=0}
 function checkXCollision(x,z,dx){var s=dx>0?1:-1;return isSolidSingle(x+s*PLAYER_RADIUS,z)}
@@ -520,7 +491,8 @@ function updateBlastEnded(be,dt,t){if(!be.mesh)return;var cfg=GAME_BALANCE.blast
 function updateGameRules(dt){timeLeft-=dt;wandPower=Math.max(WAND_MIN,wandPower-dt*WAND_DECAY*heroWandDecay);var tc=traps.find(function(t){return t.r===player.cell.r&&t.c===player.cell.c});if(tc&&!snare){snare={trap:tc,presses:0,damageTimer:0};tc.mesh.material.emissive.setHex(0x3f0d06);document.body.classList.add("snared");setMessage("魔鬼网缠住了你！快速连续点击互动按钮施展火焰熊熊。",4);playTone(118,0.16,"triangle",0.06);playNoiseBurst(0.24,0.045)}if(snare){snare.damageTimer+=dt;if(snare.damageTimer>=1){snare.damageTimer=0;damage(SNARE_DMG,"魔鬼网勒紧了脚踝，点击互动按钮挣脱："+snare.presses+"/5")}}var cr=shiftingWalls.some(function(w){return isShiftingWallSolid(w)&&w.r===player.cell.r&&w.c===player.cell.c});if(cr)damage(WALL_CRUSH_DMG*dt,"位移树篱从地下升起，正在挤压你。");collectNearbyItems();if(timeLeft<=0)endGame(false,"时间耗尽，被迷宫吞噬。");if(health<=0)endGame(false,"你倒在了黑暗的树篱中。");updateHud()}
 function interact(){if(gameState==="quiz")return;if(gameState!=="playing")return;if(snare){snare.presses+=1;playTone(260+snare.presses*55,0.05,"square",0.05);playNoiseBurst(0.05,0.02);if(snare.presses===1)speakSpell("火焰熊熊！");setMessage("火焰熊熊："+snare.presses+"/5",0.8);if(snare.presses>=5){snare.trap.mesh.material.emissive.setHex(0x220600);snare=null;document.body.classList.remove("snared");setMessage("火光烧断藤蔓，你挣脱了魔鬼网。",2.4);playChord([330,494,740],0.16,0.05)}return}if(canCastPatronus()){castPatronus();return}var cd=distanceToCell(exitCell.r,exitCell.c);if(cd<3.5){if(!cupKeyObtained){setMessage("火龙杯被强大的魔法封印保护着。找到守钥的斯芬克斯才能解锁。",3);return}endGame(true,"你握住火龙杯，蓝白色火焰撕开了迷宫的出口。三强争霸赛的冠军诞生了！");return}var sphinx=sphinxes.find(function(s){return!s.solved&&distanceToCell(s.r,s.c)<2.8});if(sphinx){openQuiz(sphinx);return}setMessage("附近没有可互动的魔法痕迹。卷轴 "+scrollCharges+" 个 | 疾跑 "+Math.round(sprintEnergy*100)+"%",1.5)}
 function useWeapon(){if(!currentHero||!currentHero.weapon){setMessage("未选择角色，无法使用武器。",1.5);return}if(weaponCooldown>0){setMessage("武器冷却中: "+Math.ceil(weaponCooldown)+"秒",1);return}if(currentHero.weapon()){weaponCooldown=currentHero.weaponCD;}}
-function canCastPatronus(){patronusTarget=null;if(patronusBeam.active)return false;var candidates=[sentinel,sentinel2];for(var i=0;i<candidates.length;i++){var s=candidates[i];if(!s.mesh||s.banished)continue;var pf=new THREE.Vector3(player.position.x,1.02,player.position.z);var dist=s.position.distanceTo(pf);if(dist<=10&&hasLineOfSight(player.position,s.position)&&isReticleOnTarget(s.position,1.4)){patronusTarget=s;return true}}return false}
+function canCastPatronus(){patronusTarget=findPatronusTarget();return!!patronusTarget}
+function findPatronusTarget(){if(patronusBeam.active)return null;var cfg=GAME_BALANCE.patronus,candidates=[sentinel,sentinel2],best=null,bestScore=-999;for(var i=0;i<candidates.length;i++){var s=candidates[i];if(!s.mesh||s.banished||s.mesh.visible===false)continue;var pf=new THREE.Vector3(player.position.x,1.02,player.position.z),dist=s.position.distanceTo(pf);if(dist>cfg.aimRange)continue;if(!hasLineOfSight(player.position,s.position))continue;var aimed=isReticleOnTarget(s.position,1.55),close=dist<=cfg.closeRange,assist=dist<=cfg.assistRange&&(isMobile||dementorAura);if(!aimed&&!close&&!assist)continue;var score=(aimed?80:0)+(close?55:0)+(assist?35:0)-dist;if(score>bestScore){best=s;bestScore=score}}return best}
 function isReticleOnTarget(tp,rad){var cd=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));cd.normalize();var cp=player.position.clone();cp.y=PLAYER_HEIGHT;var oc=cp.clone().sub(tp);var a=cd.dot(cd),b=2*oc.dot(cd),c=oc.dot(oc)-rad*rad;return b*b-4*a*c>=0}
 function castPatronus(){if(!patronusTarget)return;speakSpell("呼神护卫！");var orig=new THREE.Vector3(player.position.x,PLAYER_HEIGHT*0.7,player.position.z);var tgt=patronusTarget.position.clone();tgt.y=1.3;var bg=new THREE.CylinderGeometry(0.08,0.15,1,8),bm=new THREE.MeshBasicMaterial({color:0xffdd66,transparent:true,opacity:0.9});var beam=new THREE.Mesh(bg,bm);beam.position.copy(orig);beam.castShadow=false;scene.add(beam);var glow=new THREE.PointLight(0xffdd66,8,18);glow.position.copy(orig);scene.add(glow);var parts=[],pg=new THREE.SphereGeometry(0.06,6,6);for(var i=0;i<12;i++){var p=new THREE.Mesh(pg,bm.clone());p.position.copy(orig);scene.add(p);parts.push(p)}patronusBeam.active=true;patronusBeam.mesh=beam;patronusBeam.light=glow;patronusBeam.particles=parts;patronusBeam.target.copy(tgt);patronusBeam.origin.copy(orig);patronusBeam.startTime=performance.now();playChord([392,523,659,784],0.35,0.07);playTone(1046,0.25,"sine",0.05,0.1)}
 function speakSpell(text){try{if(typeof SpeechSynthesisUtterance!=='undefined'&&'speechSynthesis' in window){window.speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=0.95;u.pitch=1.25;u.volume=1.0;window.speechSynthesis.speak(u)}}catch(e){}}
@@ -535,7 +507,7 @@ function clearGhostPath(){for(var i=0;i<ghostPathMarkers.length;i++){var m=ghost
 function bfsShortestPath(sr,sc,er,ec){var h=mapHeight(),w=mapWidth(),vis=[],par=[];for(var r=0;r<h;r++){vis[r]=[];par[r]=[];for(var c=0;c<w;c++){vis[r][c]=false;par[r][c]=null}}var q=[{r:sr,c:sc}];vis[sr][sc]=true;var ds=[[-1,0],[1,0],[0,-1],[0,1]];while(q.length>0){var cur=q.shift();if(cur.r===er&&cur.c===ec){var path=[];var node=cur;while(node){path.unshift(node);node=par[node.r][node.c]}return path}for(var d=0;d<4;d++){var nr=cur.r+ds[d][0],nc=cur.c+ds[d][1];if(nr<0||nr>=h||nc<0||nc>=w||vis[nr][nc])continue;if(solids.has(keyOf(nr,nc)))continue;if(isGateCell(nr,nc))continue;if(isQuizBarrierCell(nr,nc))continue;vis[nr][nc]=true;par[nr][nc]=cur;q.push({r:nr,c:nc})}}return null}
 function collectNearbyItems(){if(goldenSnitch.mesh&&goldenSnitch.mesh.visible){var sd=new THREE.Vector3(player.position.x,0,player.position.z).distanceTo(new THREE.Vector3(goldenSnitch.position.x,0,goldenSnitch.position.z));if(sd<1.5){goldenSnitch.mesh.visible=false;if(goldenSnitch.light)goldenSnitch.light.visible=false;timeLeft=Math.min(START_TIME,timeLeft+30);housePoints+=100;setMessage("你抓住了金色飞贼！+100 分，+30 秒！",3);playChord([392,523,659,784,1046],0.3,0.06);speakSpell("抓住了金色飞贼！格兰芬多加一百分！");setTimeout(function(){respawnSnitch()},GAME_BALANCE.snitchRespawnMs)}}magicShards.forEach(function(s){if(s.collected||distanceToCell(s.r,s.c)>1.35)return;s.collected=true;s.mesh.visible=false;s.light.visible=false;wandPower=Math.min(1,wandPower+0.4);timeLeft=Math.min(START_TIME,timeLeft+15);housePoints+=20;setMessage("魔力碎片恢复了荧光，+20 分，并争取到一点时间。",2.2);playChord([622,932],0.12,0.05)});buffs.forEach(function(b){if(b.collected||distanceToCell(b.r,b.c)>1.35)return;b.collected=true;b.mesh.visible=false;b.light.visible=false;if(b.type==="time"){timeLeft=Math.min(START_TIME,timeLeft+35);setMessage("时间沙漏倒转，倒计时恢复 35 秒。",2.5)}else if(b.type==="scroll"){scrollCharges+=1;setMessage("获得透视卷轴。使用后地面将短暂显示通往出口的路径。",3)}else{freeSprintUntil=performance.now()+10000;sprintEnergy=1;setMessage("疾跑鞋生效：10 秒内疾跑不消耗体力。",3)}playChord([392,587,784],0.15,0.045)});if(guideUntil>0&&performance.now()>guideUntil){clearGhostPath();guideUntil=0}}
 function updateInteractionPrompt(){var ns=sphinxes.some(function(s){return!s.solved&&distanceToCell(s.r,s.c)<2.8});var nc=distanceToCell(exitCell.r,exitCell.c)<3.5;var cp=canCastPatronus();if(snare)interactionEl.textContent="点击互动 火焰熊熊 "+snare.presses+"/5";else if(nc&&!cupKeyObtained)interactionEl.textContent="需要钥匙 找守钥斯芬克斯";else if(nc)interactionEl.textContent="点击互动 锁定火龙杯";else if(ns)interactionEl.textContent="点击互动 回答斯芬克斯";else if(cp)interactionEl.textContent="点击互动 呼神护卫！";else interactionEl.textContent="";if(messageEl.dataset.temporary==="done"){messageEl.dataset.temporary="";messageEl.textContent="卷轴 "+scrollCharges+" | 疾跑 "+Math.round(sprintEnergy*100)+"% | 标记 "+deadEndMarks.length+" 处"}}
-function updateExitAudio(t){if(!audioCtx||t-lastExitChime<3.2)return;lastExitChime=t;var exit=cellToWorld(exitCell.r,exitCell.c);var dx=exit.x-player.position.x,dz=exit.z-player.position.z;var dist=Math.hypot(dx,dz);var vol=Math.max(0.018,Math.min(0.14,0.14-dist/380));var pan=Math.max(-1,Math.min(1,Math.sin(Math.atan2(dx,dz)-yaw)));playDirectionalChord([261.63,392,523.25],0.85,vol,pan)}
+function updateExitAudio(t){if(!audioCtx||t-lastExitChime<3.2)return;var exit=cellToWorld(exitCell.r,exitCell.c);var dx=exit.x-player.position.x,dz=exit.z-player.position.z;var dist=Math.hypot(dx,dz);if(!cupKeyObtained&&dist>CELL*6)return;lastExitChime=t;var vol=Math.max(0.018,Math.min(0.14,0.14-dist/380));var pan=Math.max(-1,Math.min(1,Math.sin(Math.atan2(dx,dz)-yaw)));playDirectionalChord([261.63,392,523.25],0.85,vol,pan)}
 function updateStateAudio(t){if(!audioCtx)return;if(t-lastLumosCrackle>5+wandPower*3){lastLumosCrackle=t;playTone(880+Math.random()*140,0.03,"triangle",0.015);playTone(1320+Math.random()*160,0.024,"sine",0.01,0.03)}if(snare&&t-lastSnarePulse>0.72){lastSnarePulse=t;playTone(88,0.1,"sawtooth",0.03);playNoiseBurst(0.07,0.015)}if(t-lastTorchCrackle>3.5+Math.random()*4){lastTorchCrackle=t;playNoiseBurst(0.03,0.012+Math.random()*0.015)}if(ambientDrone&&ambientDrone.gain){var target=dementorAura?0.032:snare?0.024:0.013;ambientDrone.gain.gain.setTargetAtTime(target,audioCtx.currentTime,0.35)}}
 function updateCamera(t){camera.position.copy(player.position);camera.rotation.y=yaw;camera.rotation.x=pitch;if(dementorAura){camera.position.x+=Math.sin((t||0)*27)*0.022;camera.position.y+=Math.cos((t||0)*19)*0.015}}
 function respawnSnitch(){var h=mapHeight(),w=mapWidth();for(var a=0;a<50;a++){var r=3+Math.floor(Math.random()*(h-6)),c=3+Math.floor(Math.random()*(w-6));if(!isWallCell(r,c)){var pos=cellToWorld(r,c);var dist=Math.hypot(pos.x-player.position.x,pos.z-player.position.z);if(dist>6){goldenSnitch.position.set(pos.x,1.8,pos.z);goldenSnitch.mesh.position.copy(goldenSnitch.position);if(goldenSnitch.light)goldenSnitch.light.position.copy(goldenSnitch.position);goldenSnitch.mesh.visible=true;if(goldenSnitch.light)goldenSnitch.light.visible=true;goldenSnitch.home={r:r,c:c};goldenSnitch.velocity.set((Math.random()-0.5)*5,0,(Math.random()-0.5)*5);setMessage("金色飞贼重新出现了！快抓住它！",2.5);return}}}}

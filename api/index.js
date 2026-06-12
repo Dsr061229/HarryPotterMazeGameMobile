@@ -6,7 +6,7 @@ const crypto = require('crypto');
 const app = express();
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://psadnnnoyeqinuixwumj.supabase.co/rest/v1';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm';
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const ADMIN_PW_HASH = process.env.ADMIN_PW_HASH || '$2a$10$18ET.WigOb24EdGlSHQ/Z.Nf2G7S50reC.LF6xUaEgqWhg225oh8C';
 const ADMIN_TOKEN_SECRET = process.env.ADMIN_TOKEN_SECRET || ADMIN_PW_HASH;
 const ADMIN_TOKEN_TTL_MS = 2 * 60 * 60 * 1000;
@@ -16,8 +16,7 @@ const allowedOrigins = [
     'http://localhost:8080',
     'http://localhost:3000',
     'http://127.0.0.1:8080',
-    'http://127.0.0.1:3000',
-    'https://harrypotter-maze-api.vercel.app'
+    'http://127.0.0.1:3000'
   ];
 
 app.use(cors({
@@ -51,6 +50,7 @@ function verifyAdminToken(token) {
 }
 
 function supaFetch(method, path, body) {
+  if (!SUPABASE_KEY) throw new Error('Missing SUPABASE_SERVICE_KEY');
   var headers = {
     'apikey': SUPABASE_KEY,
     'Authorization': 'Bearer ' + SUPABASE_KEY

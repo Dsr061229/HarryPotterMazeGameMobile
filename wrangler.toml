@@ -1,0 +1,8 @@
+name = "harry-potter-maze-api"
+main = "worker/index.mjs"
+compatibility_date = "2024-11-06"
+workers_dev = true
+
+[vars]
+SUPABASE_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1"
+ALLOWED_ORIGINS = "https://dsr061229.github.io,http://localhost:8080,http://localhost:3000,http://127.0.0.1:8080,http://127.0.0.1:3000"
