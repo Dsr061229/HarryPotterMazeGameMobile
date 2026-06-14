@@ -7,9 +7,10 @@
 - 前端：GitHub Pages。
 - 后端：Cloudflare Workers，源码在 `worker/index.mjs`。
 - 数据库：Supabase PostgreSQL。
-- 本地兜底：如果 Worker 暂时不可达，战绩先进入 `localStorage.maze_pending_results`，下次登录或打开统计时补传。
+- 云端兜底：优先请求 Worker；如果 Worker 未部署或暂时不可达，普通玩家登录、战绩、统计和排行榜会尝试 Supabase anon REST。
+- 本地兜底：如果 Worker 和 Supabase 都不可达，战绩先进入 `localStorage.maze_pending_results`，下次登录或打开统计时补传。
 
-生产环境不要让前端直连写 Supabase。Supabase `service_role` key 只能放在 Cloudflare Worker secret 里。
+Supabase `service_role` key 只能放在 Cloudflare Worker secret 里，不能写进前端。当前前端只暴露 anon key，用于小规模游戏的临时可用性兜底；长期仍建议部署 Worker。
 
 ## 本地运行
 
@@ -49,16 +50,16 @@ npm run worker:deploy
 
 ## 数据库权限
 
-执行 `schema.sql` 创建 `users` 表。推荐 RLS 只开放公开读取，注册、写战绩、封禁和删除全部通过 Worker 使用 `SUPABASE_SERVICE_KEY` 完成。
+执行 `schema.sql` 创建 `users` 表。当前为了 GitHub Pages 在没有 Worker 时也能用，保留受限的 anon 插入和战绩更新策略。
 
-如果以前启用过 anon 写入策略，部署 Worker 后建议删除这些策略，避免客户端绕过后端篡改排行榜。
+注意：anon 写入策略能提高连接成功率，但无法阻止懂接口的人伪造成绩。等 Cloudflare Worker 部署稳定后，可以删除 anon 写入策略，只让 Worker 使用 `SUPABASE_SERVICE_KEY` 写库。
 
 ## API 安全
 
 - 普通玩家登录后，Worker 返回用户 token；战绩写入必须带 `x-user-token`。
 - 管理员登录后，Worker 返回短期管理员 token；封禁、删除、用户列表必须带 `x-admin-token`。
 - Worker 使用 CORS allowlist，只允许 GitHub Pages 和本地开发地址调用。
-- 前端不再默认直连 Supabase 写库。
+- 如果没有 Worker，普通玩家会退回 Supabase anon REST；管理员功能仍然必须使用后端。
 
 ## 检查
 

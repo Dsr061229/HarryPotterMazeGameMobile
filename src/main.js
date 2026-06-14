@@ -151,6 +151,8 @@ if (btnWeapon) { btnWeapon.addEventListener("pointerdown",function(e){e.preventD
 // ===== 用户系统 =====
 var currentUser = null, isAdmin = false, adminToken = "", userToken = "";
 var DEFAULT_API_BASE = "";
+var SUPABASE_REST_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1";
+var SUPABASE_PUBLIC_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
 var API_BASE = getInitialApiBase();
 var REQUEST_TIMEOUT_MS = 6500;
 var RESULT_QUEUE_KEY = "maze_pending_results";
@@ -194,6 +196,13 @@ function fetchJson(url,opts){
   });
 }
 
+function supaFetch(method,path,body){
+  var headers={"apikey":SUPABASE_PUBLIC_KEY,"Authorization":"Bearer "+SUPABASE_PUBLIC_KEY};
+  if(body){headers["Content-Type"]="application/json";headers["Prefer"]="return=representation"}
+  var run=function(){return fetchJson(SUPABASE_REST_URL+path,{method:method,headers:headers,body:body?JSON.stringify(body):undefined})};
+  return run().catch(function(e){if(method==="GET")return run();throw e});
+}
+
 function isBannedError(e){
   var msg=e&&e.message?e.message:"";
   return msg.indexOf("禁用")!==-1;
@@ -221,24 +230,68 @@ function savePendingResults(q){localStorage.setItem(RESULT_QUEUE_KEY,JSON.string
 function queueResult(payload){var q=pendingResults();q.push({uid:payload.uid,won:payload.won,score:payload.score,health:payload.health,queuedAt:Date.now()});savePendingResults(q);localRecord(payload.won,payload.score,payload.health)}
 function ensureCloudSession(){if(!currentUser||isAdmin)return Promise.resolve();if(loadUserToken(currentUser))return Promise.resolve();return cloudAuth(currentUser).catch(function(){})}
 
+function supaAuth(uid){
+  return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(rows){
+    var user=rows&&rows.length?rows[0]:null;
+    if(user&&user.banned)throw new Error("该账号已被禁用");
+    if(user)return {ok:true,user:user,mode:"supabase"};
+    return supaFetch("POST","/users",{uid:uid,wins:0,losses:0,total_score:0,banned:false}).then(function(created){
+      return {ok:true,user:created&&created[0]?created[0]:{uid:uid,wins:0,losses:0,total_score:0,banned:false},mode:"supabase"};
+    }).catch(function(e){
+      var msg=e&&e.message?e.message:"";
+      if(msg.indexOf("duplicate")!==-1||msg.indexOf("409")!==-1)return supaAuth(uid);
+      throw e;
+    });
+  });
+}
+
 function cloudAuth(uid){
-  return apiFetch("POST","/api/auth",{uid:uid}).then(function(r){
+  var viaApi=API_BASE?apiFetch("POST","/api/auth",{uid:uid}):Promise.reject(new Error("API 未配置"));
+  return viaApi.then(function(r){
     if(r&&r.token)saveUserToken(uid,r.token);
     return r;
+  }).catch(function(e){
+    if(isBannedError(e))throw e;
+    return supaAuth(uid);
+  });
+}
+
+function supaRecord(payload){
+  return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(payload.uid)).then(function(rows){
+    var u=rows&&rows.length?rows[0]:null;
+    if(!u)return supaAuth(payload.uid).then(function(){return supaRecord(payload)});
+    if(u.banned)throw new Error("该账号已被禁用");
+    var hp=payload.health!==undefined?Math.ceil(Math.max(0,payload.health)):0;
+    var score=Math.max(0,Math.round(payload.score||0));
+    return supaFetch("PATCH","/users?uid=eq."+encodeURIComponent(payload.uid),{
+      wins:payload.won?(u.wins||0)+1:(u.wins||0),
+      losses:payload.won?(u.losses||0):(u.losses||0)+1,
+      total_score:(u.total_score||0)+score+(payload.won?500:0)+hp
+    });
   });
 }
 
 function cloudRecord(payload){
   loadUserToken(payload.uid);
-  return apiFetch("POST","/api/result",payload);
+  var viaApi=API_BASE?apiFetch("POST","/api/result",payload):Promise.reject(new Error("API 未配置"));
+  return viaApi.catch(function(e){if(isBannedError(e))throw e;return supaRecord(payload)});
 }
 
 function cloudStats(uid){
-  return apiFetch("GET","/api/stats/"+encodeURIComponent(uid));
+  var viaApi=API_BASE?apiFetch("GET","/api/stats/"+encodeURIComponent(uid)):Promise.reject(new Error("API 未配置"));
+  return viaApi.catch(function(e){
+    if(isBannedError(e))throw e;
+    return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(rows){
+      if(!rows||!rows.length)throw new Error("用户不存在");
+      if(rows[0].banned)throw new Error("该账号已被禁用");
+      return rows[0];
+    });
+  });
 }
 
 function cloudLeaderboard(){
-  return apiFetch("GET","/api/leaderboard");
+  var viaApi=API_BASE?apiFetch("GET","/api/leaderboard"):Promise.reject(new Error("API 未配置"));
+  return viaApi.catch(function(){return supaFetch("GET","/users?select=uid,wins,total_score&banned=eq.false&order=total_score.desc&limit=20")});
 }
 
 function flushPendingResults(){
@@ -496,7 +549,7 @@ function updateBlastEnded(be,dt,t){if(!be.mesh)return;var cfg=GAME_BALANCE.blast
 function updateGameRules(dt){timeLeft-=dt;wandPower=Math.max(WAND_MIN,wandPower-dt*WAND_DECAY*heroWandDecay);var tc=traps.find(function(t){return t.r===player.cell.r&&t.c===player.cell.c});if(tc&&!snare){snare={trap:tc,presses:0,damageTimer:0};tc.mesh.material.emissive.setHex(0x3f0d06);document.body.classList.add("snared");setMessage("魔鬼网缠住了你！快速连续点击互动按钮施展火焰熊熊。",4);playTone(118,0.16,"triangle",0.06);playNoiseBurst(0.24,0.045)}if(snare){snare.damageTimer+=dt;if(snare.damageTimer>=1){snare.damageTimer=0;damage(SNARE_DMG,"魔鬼网勒紧了脚踝，点击互动按钮挣脱："+snare.presses+"/5")}}var cr=shiftingWalls.some(function(w){return isShiftingWallSolid(w)&&w.r===player.cell.r&&w.c===player.cell.c});if(cr)damage(WALL_CRUSH_DMG*dt,"位移树篱从地下升起，正在挤压你。");collectNearbyItems();if(timeLeft<=0)endGame(false,"时间耗尽，被迷宫吞噬。");if(health<=0)endGame(false,"你倒在了黑暗的树篱中。");updateHud()}
 function interact(){if(gameState==="quiz")return;if(gameState!=="playing")return;if(snare){snare.presses+=1;playTone(260+snare.presses*55,0.05,"square",0.05);playNoiseBurst(0.05,0.02);if(snare.presses===1)speakSpell("火焰熊熊！");setMessage("火焰熊熊："+snare.presses+"/5",0.8);if(snare.presses>=5){snare.trap.mesh.material.emissive.setHex(0x220600);snare=null;document.body.classList.remove("snared");setMessage("火光烧断藤蔓，你挣脱了魔鬼网。",2.4);playChord([330,494,740],0.16,0.05)}return}if(canCastPatronus()){castPatronus();return}var cd=distanceToCell(exitCell.r,exitCell.c);if(cd<3.5){if(!cupKeyObtained){setMessage("火龙杯被强大的魔法封印保护着。找到守钥的斯芬克斯才能解锁。",3);return}endGame(true,"你握住火龙杯，蓝白色火焰撕开了迷宫的出口。三强争霸赛的冠军诞生了！");return}var sphinx=sphinxes.find(function(s){return!s.solved&&distanceToCell(s.r,s.c)<2.8});if(sphinx){openQuiz(sphinx);return}setMessage("附近没有可互动的魔法痕迹。卷轴 "+scrollCharges+" 个 | 疾跑 "+Math.round(sprintEnergy*100)+"%",1.5)}
 function useWeapon(){if(!currentHero||!currentHero.weapon){setMessage("未选择角色，无法使用武器。",1.5);return}if(weaponCooldown>0){setMessage("武器冷却中: "+Math.ceil(weaponCooldown)+"秒",1);return}if(currentHero.weapon()){weaponCooldown=currentHero.weaponCD;}}
-function canCastPatronus(){patronusTarget=findPatronusTarget();return!!patronusTarget}
+function canCastPatronus(){if(patronusBeam.active)return false;patronusTarget=findPatronusTarget();return!!patronusTarget}
 function findPatronusTarget(){if(patronusBeam.active)return null;var cfg=GAME_BALANCE.patronus,candidates=[sentinel,sentinel2],best=null,bestScore=-999;for(var i=0;i<candidates.length;i++){var s=candidates[i];if(!s.mesh||s.banished||s.mesh.visible===false)continue;var pf=new THREE.Vector3(player.position.x,1.02,player.position.z),dist=s.position.distanceTo(pf);if(dist>cfg.aimRange)continue;if(!hasLineOfSight(player.position,s.position))continue;var aimed=isReticleOnTarget(s.position,1.55),close=dist<=cfg.closeRange,assist=dist<=cfg.assistRange&&(isMobile||dementorAura);if(!aimed&&!close&&!assist)continue;var score=(aimed?80:0)+(close?55:0)+(assist?35:0)-dist;if(score>bestScore){best=s;bestScore=score}}return best}
 function isReticleOnTarget(tp,rad){var cd=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));cd.normalize();var cp=player.position.clone();cp.y=PLAYER_HEIGHT;var oc=cp.clone().sub(tp);var a=cd.dot(cd),b=2*oc.dot(cd),c=oc.dot(oc)-rad*rad;return b*b-4*a*c>=0}
 function castPatronus(){if(!patronusTarget)return;speakSpell("呼神护卫！");var orig=new THREE.Vector3(player.position.x,PLAYER_HEIGHT*0.7,player.position.z);var tgt=patronusTarget.position.clone();tgt.y=1.3;var bg=new THREE.CylinderGeometry(0.08,0.15,1,8),bm=new THREE.MeshBasicMaterial({color:0xffdd66,transparent:true,opacity:0.9});var beam=new THREE.Mesh(bg,bm);beam.position.copy(orig);beam.castShadow=false;scene.add(beam);var glow=new THREE.PointLight(0xffdd66,8,18);glow.position.copy(orig);scene.add(glow);var parts=[],pg=new THREE.SphereGeometry(0.06,6,6);for(var i=0;i<12;i++){var p=new THREE.Mesh(pg,bm.clone());p.position.copy(orig);scene.add(p);parts.push(p)}patronusBeam.active=true;patronusBeam.mesh=beam;patronusBeam.light=glow;patronusBeam.particles=parts;patronusBeam.target.copy(tgt);patronusBeam.origin.copy(orig);patronusBeam.startTime=performance.now();playChord([392,523,659,784],0.35,0.07);playTone(1046,0.25,"sine",0.05,0.1)}
