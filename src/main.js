@@ -22,17 +22,52 @@ var btnInteract = document.querySelector("#btn-interact");
 var btnMark = document.querySelector("#btn-mark");
 var btnScroll = document.querySelector("#btn-scroll");
 var btnWeapon = document.querySelector("#btn-weapon");
+var btnSettings = document.querySelector("#btn-settings");
+var hud = document.querySelector("#hud");
+var mobileButtons = document.querySelector("#mobile-buttons");
 var diffTabs = document.querySelector("#diff-tabs");
 var heroCards = document.querySelector("#hero-cards");
+var difficultyPanel = document.querySelector("#difficulty-panel");
+var difficultyBack = document.querySelector("#difficulty-back");
+var difficultyConfirm = document.querySelector("#difficulty-confirm");
+var settingsPanel = document.querySelector("#settings-panel");
+var settingsRestart = document.querySelector("#settings-restart");
+var settingsLobby = document.querySelector("#settings-lobby");
+var settingsContinue = document.querySelector("#settings-continue");
+var settingsRules = document.querySelector("#settings-rules");
+var heroPrev = document.querySelector("#hero-prev");
+var heroNext = document.querySelector("#hero-next");
+var lobbyHeroAvatar = document.querySelector("#lobby-hero-avatar");
+var lobbyHeroName = document.querySelector("#lobby-hero-name");
+var lobbyHeroTitle = document.querySelector("#lobby-hero-title");
+var heroStatSpeed = document.querySelector("#hero-stat-speed");
+var heroStatHp = document.querySelector("#hero-stat-hp");
+var heroStatPassive = document.querySelector("#hero-stat-passive");
+var heroStatWeapon = document.querySelector("#hero-stat-weapon");
+
+var GAME_STATES = {
+  AUTH: "AUTH",
+  RULES: "RULES",
+  LOBBY: "LOBBY",
+  DIFFICULTY_SELECT: "DIFFICULTY_SELECT",
+  PLAYING: "PLAYING",
+  CEREMONY: "CEREMONY",
+  QUIZ: "QUIZ",
+  SETTINGS: "SETTINGS",
+  GAMEOVER: "GAMEOVER"
+};
+var previousGameState = GAME_STATES.LOBBY;
+var rulesReturnState = GAME_STATES.LOBBY;
 
 // ===== 游戏配置 =====
 var currentDifficulty = "medium";
+var selectedHeroId = localStorage.getItem("maze_hero") || "harry";
 var currentHero = null;
 
 var difficultySettings = {
-  easy:   { size:13, startTime:240, sentinelSpeed:0.55, sphinxDmg:15, label:"简单" },
-  medium: { size:17, startTime:180, sentinelSpeed:1.0, sphinxDmg:30, label:"中档" },
-  hard:   { size:19, startTime:130, sentinelSpeed:1.35, sphinxDmg:50, label:"困难" }
+  easy:   { size:11, startTime:240, sentinelSpeed:0.6, sphinxDmg:15, label:"简单" },
+  medium: { size:15, startTime:180, sentinelSpeed:1.0, sphinxDmg:30, label:"中档" },
+  hard:   { size:19, startTime:130, sentinelSpeed:0.85, sphinxDmg:50, label:"困难" }
 };
 
 var GAME_BALANCE = {
@@ -58,7 +93,7 @@ var GAME_BALANCE = {
 
 var heroConfig = {
   harry: {
-    name:"哈利·波特", speed:5.4, hp:100,
+    name:"哈利·波特", title:"格兰芬多找球手", speed:5.4, hp:100, avatar:"⚡", className:"harry-avatar hero-figure--harry", passiveText:"摄魂怪伤害减免40%", weaponText:"格兰芬多宝剑斩击",
     passive:function(dmg,type){if(type==="dementor")return dmg*0.6;return dmg;},
     weaponName:"格兰芬多宝剑", weaponCD:6,
     weapon:function(){
@@ -71,7 +106,7 @@ var heroConfig = {
     }
   },
   cedric: {
-    name:"塞德里克·迪戈里", speed:5.2, hp:120,
+    name:"塞德里克·迪戈里", title:"赫奇帕奇级长", speed:5.2, hp:120, avatar:"🦡", className:"cedric-avatar hero-figure--cedric", passiveText:"火把消耗-35%，答错扣血-25%", weaponText:"速速禁锢定身咒",
     passive:function(dmg,type){if(type==="sphinx")return dmg*0.75;return dmg;},
     wandDecayMult:0.65,
     weaponName:"速速禁锢", weaponCD:8,
@@ -84,7 +119,7 @@ var heroConfig = {
     }
   },
   viktor: {
-    name:"威克多尔·克鲁姆", speed:7.2, hp:100,
+    name:"威克多尔·克鲁姆", title:"德姆斯特朗明星", speed:7.2, hp:100, avatar:"🦈", className:"viktor-avatar hero-figure--viktor", passiveText:"移速20%↑，但答错扣血+20%", weaponText:"秘鲁隐身烟雾弹",
     passive:function(dmg,type){if(type==="sphinx")return dmg*1.2;return dmg;},
     weaponName:"秘鲁隐身烟雾弹", weaponCD:15,
     weapon:function(){
@@ -97,13 +132,13 @@ var heroConfig = {
     }
   },
   fleur: {
-    name:"芙蓉·德拉库尔", speed:5.5, hp:90,
+    name:"芙蓉·德拉库尔", title:"布斯巴顿之花", speed:5.5, hp:90, avatar:"🦋", className:"fleur-avatar hero-figure--fleur", passiveText:"探照范围+25%，远距感知死路", weaponText:"福灵剂排除2个错误答案",
     passive:function(dmg,type){return dmg;},
     lightMult:1.25, deadEndRange:2,
     weaponName:"福灵剂", weaponCD:30,
     weapon:function(){
       var worked=false;
-      if(gameState==="quiz"&&currentQuiz){
+      if(gameState===GAME_STATES.QUIZ&&currentQuiz){
         var d=currentQuiz._data||quizData[currentQuiz.quizIndex%quizData.length];
         var order=currentQuiz._order||[0,1,2];
         var btns=quizOptionsEl.querySelectorAll("button");
@@ -123,30 +158,51 @@ var heroConfig = {
 var weaponCooldown = 0;
 
 // ===== 大厅交互 =====
-function resetLobby(){currentDifficulty=localStorage.getItem("maze_diff")||"medium";currentHero=localStorage.getItem("maze_hero")||null;if(diffTabs){diffTabs.querySelectorAll(".diff-btn").forEach(function(b){b.classList.remove("active");if(b.dataset.diff===currentDifficulty)b.classList.add("active")})}if(heroCards){heroCards.querySelectorAll(".hero-card").forEach(function(c){c.classList.remove("selected");if(currentHero&&c.dataset.hero===currentHero)c.classList.add("selected")})}}
+var heroOrder=["harry","cedric","viktor","fleur"];
+function resetLobby(){currentDifficulty=localStorage.getItem("maze_diff")||"medium";selectedHeroId=localStorage.getItem("maze_hero")||selectedHeroId||"harry";if(!heroConfig[selectedHeroId])selectedHeroId="harry";syncDifficultyUI();syncHeroUI()}
+function syncDifficultyUI(){if(diffTabs){diffTabs.querySelectorAll(".diff-btn").forEach(function(b){b.classList.remove("active");if(b.dataset.diff===currentDifficulty)b.classList.add("active")})}}
+function syncHeroUI(){
+  var hero=heroConfig[selectedHeroId]||heroConfig.harry;
+  if(heroCards){heroCards.querySelectorAll(".hero-card").forEach(function(c){c.classList.toggle("selected",c.dataset.hero===selectedHeroId)})}
+  if(lobbyHeroAvatar){lobbyHeroAvatar.className="hero-showcase-avatar "+hero.className;lobbyHeroAvatar.textContent=hero.avatar||""}
+  if(lobbyHeroName)lobbyHeroName.textContent=hero.name;
+  if(lobbyHeroTitle)lobbyHeroTitle.textContent=hero.title||"三强勇士";
+  if(heroStatSpeed)heroStatSpeed.textContent=hero.speed.toFixed(1);
+  if(heroStatHp)heroStatHp.textContent=hero.hp;
+  if(heroStatPassive)heroStatPassive.textContent=hero.passiveText||"无";
+  if(heroStatWeapon)heroStatWeapon.textContent=hero.weaponText||hero.weaponName||"无";
+}
+function selectHero(id){if(!heroConfig[id])return;selectedHeroId=id;localStorage.setItem("maze_hero",selectedHeroId);syncHeroUI()}
+function cycleHero(dir){var idx=heroOrder.indexOf(selectedHeroId);if(idx<0)idx=0;idx=(idx+dir+heroOrder.length)%heroOrder.length;selectHero(heroOrder[idx])}
 if(diffTabs){
   diffTabs.addEventListener("click",function(e){
     var btn=e.target.closest(".diff-btn");if(!btn)return;
-    diffTabs.querySelectorAll(".diff-btn").forEach(function(b){b.classList.remove("active")});
-    btn.classList.add("active");currentDifficulty=btn.dataset.diff;localStorage.setItem("maze_diff",currentDifficulty);
+    currentDifficulty=btn.dataset.diff;localStorage.setItem("maze_diff",currentDifficulty);syncDifficultyUI();
   });
 }
 if(heroCards){
   heroCards.addEventListener("click",function(e){
     var card=e.target.closest(".hero-card");if(!card)return;
-    heroCards.querySelectorAll(".hero-card").forEach(function(c){c.classList.remove("selected")});
-    card.classList.add("selected");currentHero=card.dataset.hero;localStorage.setItem("maze_hero",currentHero);
+    selectHero(card.dataset.hero);
   });
 }
+if(heroPrev)heroPrev.addEventListener("click",function(){cycleHero(-1)});
+if(heroNext)heroNext.addEventListener("click",function(){cycleHero(1)});
 
 // ===== 事件（最早注册） =====
 if (startButton) startButton.addEventListener("click", function () {
-  if(!currentHero&&!isAdmin){setMessage("请先选择难度和角色",2);return}
-  tryFullscreen();
-  overlay.classList.add("hidden");startGame();
+  if(!selectedHeroId&&!isAdmin){setMessage("请先选择角色",2);return}
+  setGameState(GAME_STATES.DIFFICULTY_SELECT);
 });
-if (restartButton) restartButton.addEventListener("click", function () { resultPanel.classList.add("hidden"); showSelectionLobby("选择你的难度和勇士，然后再次踏入迷宫！",true); });
+if (restartButton) restartButton.addEventListener("click", function () { resultPanel.classList.add("hidden"); setGameState(GAME_STATES.DIFFICULTY_SELECT); });
 if (btnWeapon) { btnWeapon.addEventListener("pointerdown",function(e){e.preventDefault();e.stopPropagation();useWeapon()}); btnWeapon.addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation()}); }
+if(difficultyBack)difficultyBack.addEventListener("click",function(){setGameState(GAME_STATES.LOBBY)});
+if(difficultyConfirm)difficultyConfirm.addEventListener("click",function(){enterMaze(selectedHeroId,currentDifficulty)});
+if(btnSettings)btnSettings.addEventListener("click",function(){if(gameState===GAME_STATES.PLAYING||gameState===GAME_STATES.CEREMONY){previousGameState=gameState;setGameState(GAME_STATES.SETTINGS)}});
+if(settingsContinue)settingsContinue.addEventListener("click",function(){setGameState(previousGameState===GAME_STATES.CEREMONY?GAME_STATES.CEREMONY:GAME_STATES.PLAYING)});
+if(settingsRestart)settingsRestart.addEventListener("click",function(){exitMaze(false);setGameState(GAME_STATES.DIFFICULTY_SELECT)});
+if(settingsLobby)settingsLobby.addEventListener("click",function(){exitMaze(true);setGameState(GAME_STATES.LOBBY)});
+if(settingsRules)settingsRules.addEventListener("click",function(){rulesReturnState=GAME_STATES.SETTINGS;setGameState(GAME_STATES.RULES)});
 
 // ===== 用户系统 =====
 var currentUser = null, isAdmin = false, adminToken = "", userToken = "";
@@ -234,9 +290,9 @@ function supaAuth(uid){
   return supaFetch("GET","/users?select=*&uid=eq."+encodeURIComponent(uid)).then(function(rows){
     var user=rows&&rows.length?rows[0]:null;
     if(user&&user.banned)throw new Error("该账号已被禁用");
-    if(user)return {ok:true,user:user,mode:"supabase"};
+    if(user)return {ok:true,user:user,mode:"supabase",created:false};
     return supaFetch("POST","/users",{uid:uid,wins:0,losses:0,total_score:0,banned:false}).then(function(created){
-      return {ok:true,user:created&&created[0]?created[0]:{uid:uid,wins:0,losses:0,total_score:0,banned:false},mode:"supabase"};
+      return {ok:true,user:created&&created[0]?created[0]:{uid:uid,wins:0,losses:0,total_score:0,banned:false},mode:"supabase",created:true};
     }).catch(function(e){
       var msg=e&&e.message?e.message:"";
       if(msg.indexOf("duplicate")!==-1||msg.indexOf("409")!==-1)return supaAuth(uid);
@@ -249,6 +305,7 @@ function cloudAuth(uid){
   var viaApi=API_BASE?apiFetch("POST","/api/auth",{uid:uid}):Promise.reject(new Error("API 未配置"));
   return viaApi.then(function(r){
     if(r&&r.token)saveUserToken(uid,r.token);
+    if(r&&r.created===undefined)r.created=!!r.isNew;
     return r;
   }).catch(function(e){
     if(isBannedError(e))throw e;
@@ -320,7 +377,7 @@ var btnStats=document.querySelector("#btn-stats"),btnAdmin=document.querySelecto
 
 if(authLogin)authLogin.addEventListener("click",doAuth);
 if(authUidEl)authUidEl.addEventListener("keydown",function(e){if(e.key==="Enter")doAuth()});
-if(rulesOk)rulesOk.addEventListener("click",function(){showSelectionLobby("选择你的难度和勇士，然后踏入迷宫！",true)});
+if(rulesOk)rulesOk.addEventListener("click",function(){var target=rulesReturnState||GAME_STATES.LOBBY;if(target===GAME_STATES.SETTINGS){setGameState(GAME_STATES.SETTINGS);setMessage("规则已查看。",1.5);return}setGameState(GAME_STATES.LOBBY);tryFullscreen();setMessage("选择你的勇士，然后踏入迷宫！",3)});
 if(adminClose)adminClose.addEventListener("click",function(){adminPanel.classList.add("hidden")});
 if(statsClose)statsClose.addEventListener("click",function(){statsPanel.classList.add("hidden")});
 if(btnStats)btnStats.addEventListener("click",function(e){e.stopPropagation();showStats()});
@@ -332,12 +389,12 @@ function doAuth(){
   if(!uid){authMsg.textContent="请输入游戏ID";return}
   if(!/^[a-zA-Z0-9]+$/.test(uid)){authMsg.textContent="只能使用英文字母和数字";return}
   if(uid.length<2){authMsg.textContent="ID至少2个字符";return}
-  if(uid==="Dsr"){if(!API_BASE){authMsg.textContent="管理员功能需要先配置后端 API";return}var pw=prompt("管理员密码:");if(pw===null){authMsg.textContent="已取消登录";return}apiFetch("POST","/api/admin/login",{uid:uid,password:pw}).then(function(r){adminToken=r.token;userToken="";isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("管理员登录成功",2)}).catch(function(e){authMsg.textContent=e.message||"密码错误"});return}
+  if(uid==="Dsr"){if(!API_BASE){authMsg.textContent="管理员功能需要先配置后端 API";return}var pw=prompt("管理员密码:");if(pw===null){authMsg.textContent="已取消登录";return}apiFetch("POST","/api/admin/login",{uid:uid,password:pw}).then(function(r){adminToken=r.token;userToken="";isAdmin=true;currentUser="Dsr";btnAdmin.classList.remove("hidden");authPanel.classList.add("hidden");rulesPanel.classList.add("hidden");tryFullscreen();setGameState(GAME_STATES.LOBBY);setMessage("管理员登录成功，选择勇士踏入迷宫。",2)}).catch(function(e){authMsg.textContent=e.message||"密码错误"});return}
   authMsg.textContent="正在连接云端...";
-  cloudAuth(uid).then(function(){finishAuth(uid);flushPendingResults()}).catch(function(e){if(isBannedError(e)){authMsg.textContent=e.message;return}fallbackAuth(uid);if(currentUser===uid)setMessage("云端暂不可用，本局会先离线记录，稍后自动补传。",3)})}
-function finishAuth(uid){isAdmin=false;currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");rulesPanel.classList.remove("hidden");setMessage("阅读规则，准备踏入挑战。",4)}
-function fallbackAuth(uid){userToken="";var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}if(!db.users[uid]){db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid)}
-function showSelectionLobby(msg,requestFull){rulesPanel.classList.add("hidden");authPanel.classList.add("hidden");overlay.classList.remove("hidden");resetLobby();if(requestFull)tryFullscreen();checkOrientation();setMessage(msg||"选择你的难度和勇士，然后踏入迷宫！",3)}
+  cloudAuth(uid).then(function(r){finishAuth(uid,!!(r&&r.created));flushPendingResults()}).catch(function(e){if(isBannedError(e)){authMsg.textContent=e.message;return}fallbackAuth(uid);if(currentUser===uid)setMessage("云端暂不可用，本局会先离线记录，稍后自动补传。",3)})}
+function finishAuth(uid,isNew){isAdmin=false;currentUser=uid;btnAdmin.classList.add("hidden");authPanel.classList.add("hidden");if(isNew){rulesReturnState=GAME_STATES.LOBBY;setGameState(GAME_STATES.RULES);setMessage("欢迎加入。先看规则，再进入大厅。",3);return}rulesPanel.classList.add("hidden");tryFullscreen();setGameState(GAME_STATES.LOBBY);setMessage("欢迎回来，"+uid+"。选择勇士后踏入迷宫。",3)}
+function fallbackAuth(uid){userToken="";var db=localDB();if(db.users[uid]&&db.users[uid].banned){authMsg.textContent="该账号已被禁用";return}var created=false;if(!db.users[uid]){created=true;db.users[uid]={wins:0,losses:0,totalScore:0,rankScore:0,lastHealth:100,createdAt:Date.now(),banned:false};localSave(db)}finishAuth(uid,created)}
+function showSelectionLobby(msg,requestFull){setGameState(GAME_STATES.LOBBY);if(requestFull)tryFullscreen();setMessage(msg||"选择你的勇士，然后踏入迷宫！",3)}
 function recordGameResult(won,score,endHealth){
   if(!currentUser)return;
   var hp=endHealth!==undefined?Math.max(0,Math.ceil(endHealth)):0;
@@ -435,7 +492,7 @@ var keys=new Set,solids=new Set,markerCells=new Set,magicShards=[],traps=[],sphi
 var joystickState={active:false,touchId:null,baseX:0,baseY:0,dx:0,dy:0};
 var cameraTouch={active:false,touchId:null,lastX:0,lastY:0};
 var sprintToggled=false,keyboardSprint=false;
-var yaw=0,pitch=0,velocity=new THREE.Vector3(),lastTime=performance.now(),gameState="menu";
+var yaw=0,pitch=0,velocity=new THREE.Vector3(),lastTime=performance.now(),gameState=GAME_STATES.AUTH,animationFrameId=0,lobbyReady=false;
 var timeLeft=START_TIME,health=100,wandPower=1,sprintEnergy=1,isSprinting=false,dementorAura=false,snare=null,scrollCharges=0,cupKeyObtained=false,freeSprintUntil=0,guideUntil=0,currentQuiz=null,ceremonyAlpha=0,housePoints=0;
 var audioCtx=null,ambientDrone=null,lastExitChime=0,lastDementorTone=0,lastFootstep=0,lastLumosCrackle=0,lastSnarePulse=0,lastTorchCrackle=0;
 var player={position:new THREE.Vector3(),cell:{r:0,c:0}};
@@ -489,6 +546,39 @@ function initWorld(){solids.clear();var w=mapWidth(),h=mapHeight();
   if(currentDifficulty==="hard"&&GAME_BALANCE.blastEnded.extraOnHard>0){placeExtraBlastEnded(mainPath);addBlastEndedSkrewt(blastEnded2)}
   addFireflies();addBuffs();addGoldenSnitch()}
 
+function initLobby(){
+  cleanupWorld();lobbyReady=true;currentHero=null;timeLeft=START_TIME;health=heroHP;housePoints=0;weaponCooldown=0;
+  var floor=new THREE.Mesh(new THREE.PlaneGeometry(42,28),floorMaterial);floor.rotation.x=-Math.PI/2;floor.position.z=-10;floor.receiveShadow=true;scene.add(floor);
+  var hedgeMat=new THREE.MeshStandardMaterial({color:0x20351f,roughness:0.9,emissive:0x071407,emissiveIntensity:0.25});
+  function hedge(x,z,w,h){var m=new THREE.Mesh(new THREE.BoxGeometry(w,4.2,h),hedgeMat);m.position.set(x,2.1,z);m.receiveShadow=true;m.castShadow=true;scene.add(m)}
+  hedge(-8,-12,3,18);hedge(8,-12,3,18);hedge(0,-20,20,3);hedge(-14,-8,8,3);hedge(14,-8,8,3);
+  var archMat=new THREE.MeshStandardMaterial({color:0x726044,roughness:0.65,emissive:0x1f170d,emissiveIntensity:0.2});
+  var left=new THREE.Mesh(new THREE.BoxGeometry(1.1,5.6,1.1),archMat),right=left.clone(),top=new THREE.Mesh(new THREE.BoxGeometry(6.2,1.0,1.1),archMat);
+  left.position.set(-3,2.8,-5);right.position.set(3,2.8,-5);top.position.set(0,5.6,-5);scene.add(left,right,top);
+  for(var i=0;i<2;i++){createTorch(i?4.2:-4.2,-4.2,0,0)}
+  player.position.set(0,PLAYER_HEIGHT,8);yaw=Math.PI;pitch=-0.08;camera.position.copy(player.position);updateCamera();
+  lumos.intensity=7;lumos.distance=18;startRenderLoop();setMessage("大厅已就绪。选择你的勇士，确认难度后踏入迷宫。",3)
+}
+
+function setGameState(next){
+  gameState=next;
+  if(authPanel)authPanel.classList.toggle("hidden",next!==GAME_STATES.AUTH);
+  if(rulesPanel)rulesPanel.classList.toggle("hidden",next!==GAME_STATES.RULES);
+  if(overlay)overlay.classList.toggle("hidden",next!==GAME_STATES.LOBBY);
+  if(difficultyPanel)difficultyPanel.classList.toggle("hidden",next!==GAME_STATES.DIFFICULTY_SELECT);
+  if(settingsPanel)settingsPanel.classList.toggle("hidden",next!==GAME_STATES.SETTINGS);
+  if(resultPanel)resultPanel.classList.toggle("hidden",next!==GAME_STATES.GAMEOVER);
+  if(quizPanel&&next!==GAME_STATES.QUIZ)quizPanel.classList.add("hidden");
+  var inRun=next===GAME_STATES.PLAYING||next===GAME_STATES.CEREMONY||next===GAME_STATES.QUIZ||next===GAME_STATES.SETTINGS;
+  if(hud)hud.classList.toggle("hidden",next===GAME_STATES.AUTH||next===GAME_STATES.RULES||next===GAME_STATES.LOBBY||next===GAME_STATES.DIFFICULTY_SELECT);
+  if(btnSettings)btnSettings.classList.toggle("hidden",!(next===GAME_STATES.PLAYING||next===GAME_STATES.CEREMONY));
+  if(btnStats)btnStats.classList.toggle("hidden",next===GAME_STATES.PLAYING||next===GAME_STATES.CEREMONY||next===GAME_STATES.SETTINGS);
+  if(mobileButtons)mobileButtons.classList.toggle("hidden",next!==GAME_STATES.PLAYING&&next!==GAME_STATES.CEREMONY);
+  if(next===GAME_STATES.LOBBY){resetLobby();if(!lobbyReady)initLobby()}
+  if(next===GAME_STATES.DIFFICULTY_SELECT){syncDifficultyUI();tryFullscreen()}
+  checkOrientation();
+}
+
 
 function findMainPath(){var h=mapHeight(),w=mapWidth(),vis=[],par=[];for(var r=0;r<h;r++){vis[r]=[];par[r]=[];for(var c=0;c<w;c++){vis[r][c]=false;par[r][c]=null}}var q=[{r:startCell.r,c:startCell.c}];vis[startCell.r][startCell.c]=true;var ds=[[-1,0],[1,0],[0,-1],[0,1]];while(q.length>0){var cur=q.shift();if(cur.r===exitCell.r&&cur.c===exitCell.c){var path=[];var node=cur;while(node){path.unshift(node);node=par[node.r][node.c]}return path}for(var d=0;d<4;d++){var nr=cur.r+ds[d][0],nc=cur.c+ds[d][1];if(nr<0||nr>=h||nc<0||nc>=w||vis[nr][nc])continue;if(solids.has(keyOf(nr,nc)))continue;vis[nr][nc]=true;par[nr][nc]=cur;q.push({r:nr,c:nc})}}return null}
 function findBarrierOffMainPath(r,c,mp){var ds=[[-1,0],[1,0],[0,-1],[0,1]],ps={},h=mapHeight(),w=mapWidth();if(mp)mp.forEach(function(cell){ps[keyOf(cell.r,cell.c)]=true});for(var d=0;d<ds.length;d++){var nr=r+ds[d][0],nc=c+ds[d][1];if(nr>0&&nr<h-1&&nc>0&&nc<w-1&&!isWallCell(nr,nc)){var k=keyOf(nr,nc);if(!ps[k]&&k!==keyOf(startCell.r,startCell.c)&&k!==keyOf(exitCell.r,exitCell.c))return{r:nr,c:nc}}}for(var d=0;d<ds.length;d++){var nr=r+ds[d][0],nc=c+ds[d][1];if(nr>0&&nr<h-1&&nc>0&&nc<w-1&&!isWallCell(nr,nc))return{r:nr,c:nc}}return null}
@@ -523,18 +613,37 @@ function addGoldenSnitch(){var h=mapHeight(),w=mapWidth(),r=Math.floor(h/2)+Math
 function updateJoystick(){if(!joystickEl||!joystickKnobEl)return;if(!joystickState.active){joystickEl.classList.add("joystick-hidden");joystickEl.classList.remove("joystick-active");return}joystickEl.classList.add("joystick-active");joystickEl.classList.remove("joystick-hidden");joystickEl.style.left=(joystickState.baseX-65)+"px";joystickEl.style.top=(joystickState.baseY-65)+"px";var dist=Math.hypot(joystickState.dx,joystickState.dy),cd=Math.min(dist,JOYSTICK_MAX_R),nx=dist>0?joystickState.dx/dist*cd:0,ny=dist>0?joystickState.dy/dist*cd:0;joystickKnobEl.style.transform="translate(calc(-50% + "+nx+"px), calc(-50% + "+ny+"px))"}
 function getMoveInput(){var ix=0,iz=0;if(joystickState.active){var dist=Math.hypot(joystickState.dx,joystickState.dy);if(dist>8){var norm=Math.min(dist,JOYSTICK_MAX_R)/JOYSTICK_MAX_R;ix=joystickState.dx/dist*norm;iz=-joystickState.dy/dist*norm}}else{if(keys.has("ArrowUp")||keys.has("KeyW"))iz=1;if(keys.has("ArrowDown")||keys.has("KeyS"))iz=-1;if(keys.has("ArrowRight")||keys.has("KeyD"))ix=1;if(keys.has("ArrowLeft")||keys.has("KeyA"))ix=-1}return{x:ix,z:iz}}
 
-function startGame(){if(!currentUser&&!isAdmin){authPanel.classList.remove("hidden");setMessage("请先登录或注册游戏ID",3);return}if(!currentHero&&!isAdmin){setMessage("请选择难度和角色后再踏入迷宫！",3);return}var diff=difficultySettings[currentDifficulty];if(!diff){currentDifficulty="medium";diff=difficultySettings.medium}var hero=currentHero?heroConfig[currentHero]:null;currentHero=hero;MAZE_SIZE=diff.size;START_TIME=diff.startTime;SENTINEL_SPD=diff.sentinelSpeed;SPHINX_DMG=diff.sphinxDmg;if(hero){WALK_SPEED=hero.speed;heroHP=hero.hp;heroWandDecay=hero.wandDecayMult||1;heroLightMult=hero.lightMult||1;heroDeadEndR=hero.deadEndRange||0}else{heroHP=100;heroWandDecay=1;heroLightMult=1;heroDeadEndR=0}weaponCooldown=0;if(currentHero){currentHero._vanishUntil=0}if(currentHero&&currentHero._smokeFx){for(var si=0;si<currentHero._smokeFx.length;si++){var sm=currentHero._smokeFx[si];scene.remove(sm);sm.geometry.dispose();sm.material.dispose()}currentHero._smokeFx=[]}cleanupWorld();generateMaze();initWorld();overlay.classList.add("hidden");resultPanel.classList.add("hidden");quizPanel.classList.add("hidden");gameState="ceremony";ceremonyAlpha=0;document.body.classList.add("ceremony");resetGame(true);var itd=('ontouchstart' in window)||(navigator.maxTouchPoints||0)>0;try{canvas.requestPointerLock()}catch(e){}if(itd){tryFullscreen()}ensureAudio();startAmbientDrone();setMessage("你站在迷宫入口。树篱在你前方分开，远处有微弱的蓝光在闪烁。",4);if(joystickEl){joystickEl.classList.add("joystick-hidden");joystickEl.classList.remove("joystick-active")}joystickState.active=false;cameraTouch.active=false}
+function startGame(){return enterMaze(selectedHeroId,currentDifficulty)}
+function enterMaze(heroId,difficulty){
+  if(!currentUser&&!isAdmin){setGameState(GAME_STATES.AUTH);setMessage("请先登录或注册游戏ID",3);return}
+  if(!heroId&&!isAdmin){setMessage("请选择角色后再踏入迷宫！",3);setGameState(GAME_STATES.LOBBY);return}
+  currentDifficulty=difficultySettings[difficulty]?difficulty:"medium";localStorage.setItem("maze_diff",currentDifficulty);
+  selectedHeroId=heroConfig[heroId]?heroId:"harry";localStorage.setItem("maze_hero",selectedHeroId);
+  var diff=difficultySettings[currentDifficulty],hero=heroConfig[selectedHeroId];currentHero=hero;
+  MAZE_SIZE=diff.size;START_TIME=diff.startTime;SENTINEL_SPD=diff.sentinelSpeed;SPHINX_DMG=diff.sphinxDmg;
+  if(hero){WALK_SPEED=hero.speed;heroHP=hero.hp;heroWandDecay=hero.wandDecayMult||1;heroLightMult=hero.lightMult||1;heroDeadEndR=hero.deadEndRange||0}else{heroHP=100;heroWandDecay=1;heroLightMult=1;heroDeadEndR=0}
+  weaponCooldown=0;if(currentHero){currentHero._vanishUntil=0}
+  if(currentHero&&currentHero._smokeFx){for(var si=0;si<currentHero._smokeFx.length;si++){var sm=currentHero._smokeFx[si];scene.remove(sm);sm.geometry.dispose();sm.material.dispose()}currentHero._smokeFx=[]}
+  cleanupWorld();generateMaze();initWorld();
+  setGameState(GAME_STATES.CEREMONY);ceremonyAlpha=0;document.body.classList.add("ceremony");resetGame(true);
+  try{canvas.requestPointerLock()}catch(e){}if(isMobile){tryFullscreen()}
+  ensureAudio();startAmbientDrone();setMessage("你站在迷宫入口。树篱在你前方分开，远处有微弱的蓝光在闪烁。",4);
+  if(joystickEl){joystickEl.classList.add("joystick-hidden");joystickEl.classList.remove("joystick-active")}joystickState.active=false;cameraTouch.active=false
+}
+function exitMaze(resetAudio){stopRenderLoop();try{document.exitPointerLock()}catch(e){}stopAmbientDrone();clearPatronusBeam();clearGhostPath();cleanupWorld();currentHero=null;snare=null;currentQuiz=null;dementorAura=false;document.body.classList.remove("snared","dementor","damaged","shake","ceremony");if(resetAudio&&audioCtx){try{audioCtx.close()}catch(e){}audioCtx=null;ambientDrone=null}initLobby()}
 function tryFullscreen(){var el=document.documentElement,p=null;if(document.fullscreenElement||document.webkitFullscreenElement||document.msFullscreenElement){tryLockLandscape();return}if(el.requestFullscreen){p=el.requestFullscreen()}else if(el.webkitRequestFullscreen){p=el.webkitRequestFullscreen()}else if(el.msRequestFullscreen){p=el.msRequestFullscreen()}if(p&&p.then){p.then(function(){tryLockLandscape()}).catch(function(){tryLockLandscape()})}else tryLockLandscape()}
 function tryLockLandscape(){try{if(screen.orientation&&screen.orientation.lock)screen.orientation.lock("landscape").catch(function(){})}catch(e){}}
-function cleanupWorld(){var ps=new Set([scene,camera,lumos,lumos.target]);for(var i=scene.children.length-1;i>=0;i--){var child=scene.children[i];if(ps.has(child))continue;disposeR(child);scene.remove(child)}function disposeR(obj){if(ps.has(obj))return;if(obj.children){for(var i=obj.children.length-1;i>=0;i--){disposeR(obj.children[i]);obj.remove(obj.children[i])}}if(obj.geometry&&!obj.geometry._shared){try{obj.geometry.dispose()}catch(e){}}if(obj.material){var mats=Array.isArray(obj.material)?obj.material:[obj.material];mats.forEach(function(m){if(m&&m.dispose)try{m.dispose()}catch(e){}})}if(obj.dispose&&typeof obj.dispose==="function"&&!obj.geometry){try{obj.dispose()}catch(e){}}}magicShards.length=0;traps.length=0;sphinxes.length=0;gates.length=0;quizBarriers.length=0;fireflies.length=0;shiftingWalls.length=0;shiftingWallSolidCache={};deadEndMarks.length=0;buffs.length=0;exitParticles.length=0;torches.length=0;entranceBraziers.length=0;sentinel.mesh=null;sentinel.light=null;sentinel.path=[];sentinel2.mesh=null;sentinel2.light=null;sentinel2.path=[];goldenSnitch.mesh=null;goldenSnitch.light=null;blastEndedPack.forEach(function(be){be.mesh=null;be.light=null;be.state="patrol";be.hitTimer=0;be.listenTimer=0});patronusTarget=null;solids.clear();markerCells.clear()}
+function cleanupWorld(){lobbyReady=false;var ps=new Set([scene,camera,lumos,lumos.target]);for(var i=scene.children.length-1;i>=0;i--){var child=scene.children[i];if(ps.has(child))continue;disposeR(child);scene.remove(child)}function disposeR(obj){if(ps.has(obj))return;if(obj.children){for(var i=obj.children.length-1;i>=0;i--){disposeR(obj.children[i]);obj.remove(obj.children[i])}}if(obj.geometry&&!obj.geometry._shared){try{obj.geometry.dispose()}catch(e){}}if(obj.material){var mats=Array.isArray(obj.material)?obj.material:[obj.material];mats.forEach(function(m){if(m&&m.dispose)try{m.dispose()}catch(e){}})}if(obj.dispose&&typeof obj.dispose==="function"&&!obj.geometry){try{obj.dispose()}catch(e){}}}magicShards.length=0;traps.length=0;sphinxes.length=0;gates.length=0;quizBarriers.length=0;fireflies.length=0;shiftingWalls.length=0;shiftingWallSolidCache={};deadEndMarks.length=0;buffs.length=0;exitParticles.length=0;torches.length=0;entranceBraziers.length=0;sentinel.mesh=null;sentinel.light=null;sentinel.path=[];sentinel2.mesh=null;sentinel2.light=null;sentinel2.path=[];goldenSnitch.mesh=null;goldenSnitch.light=null;blastEndedPack.forEach(function(be){be.mesh=null;be.light=null;be.state="patrol";be.hitTimer=0;be.listenTimer=0});patronusTarget=null;solids.clear();markerCells.clear()}
 function setupCeremonyCamera(){var sp=cellToWorld(startCell.r,startCell.c);player.position.set(sp.x,PLAYER_HEIGHT,sp.z);camera.position.copy(player.position);yaw=Math.atan2(sp.x-0,sp.z-0);pitch=0;updateCamera()}
 function resetGame(placeAtStart){timeLeft=START_TIME;health=heroHP;wandPower=1;sprintEnergy=1;isSprinting=false;dementorAura=false;snare=null;scrollCharges=0;cupKeyObtained=false;freeSprintUntil=0;guideUntil=0;currentQuiz=null;ceremonyAlpha=0;housePoints=0;velocity.set(0,0,0);yaw=-Math.PI/2;pitch=0;markerCells.clear();sprintToggled=false;keyboardSprint=false;if(btnSprint)btnSprint.classList.remove("active","boosting");if(placeAtStart)setupCeremonyCamera();magicShards.forEach(function(s){s.collected=false;s.mesh.visible=true;s.light.visible=true});traps.forEach(function(t){t.cooldown=0;t.mesh.material.emissive.setHex(0x220600)});sphinxes.forEach(function(s){s.solved=false;s.mesh.visible=true;s.barrier.visible=true});gates.forEach(function(g){g.open=false;g.mesh.visible=true});buffs.forEach(function(b){b.collected=false;b.mesh.visible=true;b.light.visible=true});sentinel.target=0;sentinel.strikeTimer=0;sentinel.forcedChaseTimer=0;sentinel.banished=false;sentinel.banishTimer=0;sentinel._frozen=0;sentinel2.target=0;sentinel2.strikeTimer=0;sentinel2.forcedChaseTimer=0;sentinel2.banished=false;sentinel2.banishTimer=0;sentinel2._frozen=0;clearPatronusBeam();clearGhostPath();guideUntil=0;if(sentinel.path.length>0&&sentinel.mesh){var f=cellToWorld(sentinel.path[0].r,sentinel.path[0].c);sentinel.position.set(f.x,1.02,f.z);sentinel.mesh.position.copy(sentinel.position);if(sentinel.light)sentinel.light.position.set(f.x,1.7,f.z)}if(sentinel2.path.length>0&&sentinel2.mesh){var f2=cellToWorld(sentinel2.path[0].r,sentinel2.path[0].c);sentinel2.position.set(f2.x,1.02,f2.z);sentinel2.mesh.position.copy(sentinel2.position);if(sentinel2.light)sentinel2.light.position.set(f2.x,1.7,f2.z)}blastEndedPack.forEach(function(be){var bh=cellToWorld(be.home.r,be.home.c);be.position.set(bh.x,0.62,bh.z);be.state="patrol";be.stunTimer=0;be.hitTimer=0;be.listenTimer=0;if(be.mesh){be.mesh.position.copy(be.position);if(be.light)be.light.position.set(bh.x,1,bh.z)}});document.body.classList.remove("snared","dementor","damaged","shake");document.body.classList.add("ceremony");updateHud();setMessage("黑暗笼罩着树篱迷宫。左侧摇杆移动，右侧滑动环顾。",4)}
 
-function animate(now){var dt=Math.min((now-lastTime)/1000,0.05);lastTime=now;var t=now/1000;if(weaponCooldown>0)weaponCooldown=Math.max(0,weaponCooldown-dt);
-  if(currentHero&&currentHero._smokeFx){for(var si=currentHero._smokeFx.length-1;si>=0;si--){var s=currentHero._smokeFx[si];s.userData.life-=dt;s.material.opacity=Math.max(0,s.userData.life/3);s.scale.setScalar(1+(3-s.userData.life)*1.5);if(s.userData.life<=0){scene.remove(s);s.geometry.dispose();s.material.dispose();currentHero._smokeFx.splice(si,1)}}}updateSceneMotion(t,dt);updateExitReveal();if(gameState==="playing"){updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);blastEndedPack.forEach(function(be){updateBlastEnded(be,dt,t)});updateGameRules(dt,t);updateInteractionPrompt();updateExitAudio(t);updateStateAudio(t)}else if(gameState==="ceremony"){updateCeremony(dt,t);updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);updateStateAudio(t)}else{updateSentinel(dt,t);updateSentinel2(dt,t)}lumos.intensity=8.0+wandPower*8.0+Math.sin(t*0.012)*0.3;lumos.distance=(14+wandPower*16)*heroLightMult;lumos.angle=Math.PI/(4.5/heroLightMult);updateCamera(t);updateJoystick();renderer.render(scene,camera);requestAnimationFrame(animate)}
-function updateCeremony(dt,t){ceremonyAlpha+=dt;var moved=Math.hypot(velocity.x,velocity.z)>0.4;if(moved||ceremonyAlpha>2.5){gameState="playing";document.body.classList.remove("ceremony");timeLeft=START_TIME;setMessage("你踏入了迷宫。远处传来火龙杯的低吟……",3.5);playChord([392,523,784],0.32,0.055)}}
+function startRenderLoop(){if(animationFrameId)return;lastTime=performance.now();animationFrameId=requestAnimationFrame(animate)}
+function stopRenderLoop(){if(animationFrameId){cancelAnimationFrame(animationFrameId);animationFrameId=0}}
+function animate(now){if(!animationFrameId)return;var dt=Math.min((now-lastTime)/1000,0.05);lastTime=now;var t=now/1000;if(weaponCooldown>0)weaponCooldown=Math.max(0,weaponCooldown-dt);
+  if(currentHero&&currentHero._smokeFx){for(var si=currentHero._smokeFx.length-1;si>=0;si--){var s=currentHero._smokeFx[si];s.userData.life-=dt;s.material.opacity=Math.max(0,s.userData.life/3);s.scale.setScalar(1+(3-s.userData.life)*1.5);if(s.userData.life<=0){scene.remove(s);s.geometry.dispose();s.material.dispose();currentHero._smokeFx.splice(si,1)}}}updateSceneMotion(t,dt);updateExitReveal();if(gameState===GAME_STATES.PLAYING){updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);blastEndedPack.forEach(function(be){updateBlastEnded(be,dt,t)});updateGameRules(dt,t);updateInteractionPrompt();updateExitAudio(t);updateStateAudio(t)}else if(gameState===GAME_STATES.CEREMONY){updateCeremony(dt,t);updatePlayer(dt);updateSentinel(dt,t);updateSentinel2(dt,t);updateStateAudio(t)}lumos.intensity=8.0+wandPower*8.0+Math.sin(t*0.012)*0.3;lumos.distance=(14+wandPower*16)*heroLightMult;lumos.angle=Math.PI/(4.5/heroLightMult);updateCamera(t);updateJoystick();renderer.render(scene,camera);animationFrameId=requestAnimationFrame(animate)}
+function updateCeremony(dt,t){ceremonyAlpha+=dt;var moved=Math.hypot(velocity.x,velocity.z)>0.4;if(moved||ceremonyAlpha>2.5){setGameState(GAME_STATES.PLAYING);document.body.classList.remove("ceremony");timeLeft=START_TIME;setMessage("你踏入了迷宫。远处传来火龙杯的低吟……",3.5);playChord([392,523,784],0.32,0.055)}}
 function updateSceneMotion(t,dt){magicShards.forEach(function(s,i){if(!s.mesh)return;s.mesh.rotation.y+=dt*1.8;s.mesh.position.y=1.1+Math.sin(t*2.6+i)*0.14;if(s.light)s.light.intensity=s.collected?0:1.6+Math.sin(t*4+i)*0.3});var cup=scene.getObjectByName("triwizardCup"),cf=scene.getObjectByName("cupFlame"),cl=scene.getObjectByName("cupLight");if(cup)cup.rotation.y+=dt*0.35;if(cf){cf.scale.setScalar(0.85+Math.sin(t*5.5)*0.15);cf.rotation.y+=dt*1.4}if(cl)cl.intensity=3.0+Math.sin(t*3.8)*0.8;var ew=cellToWorld(exitCell.r,exitCell.c);exitParticles.forEach(function(p){if(!p.mesh)return;var a=t*1.4+p.seed;p.mesh.position.x=ew.x+Math.cos(a)*p.radius;p.mesh.position.z=ew.z+Math.sin(a*0.9)*p.radius;p.mesh.position.y=p.height+Math.sin(a*1.7)*0.8;p.mesh.material.opacity=0.42+Math.sin(a*2.2)*0.28});torches.forEach(function(tc){if(!tc.light)return;var fl=0.82+Math.sin(t*12+tc.seed)*0.14+Math.sin(t*19+tc.seed)*0.08;tc.light.intensity=tc.baseIntensity*fl;if(tc.flame){tc.flame.scale.setScalar(0.85+Math.sin(t*14+tc.seed)*0.18);tc.flame.position.y=2.15+Math.sin(t*16+tc.seed)*0.04}});entranceBraziers.forEach(function(b){if(!b.light)return;b.light.intensity=3.0+Math.sin(t*11+b.seed)*0.8+Math.sin(t*17+b.seed)*0.3});fireflies.forEach(function(f){if(!f.mesh)return;f.mesh.position.y+=Math.sin(t*1.4+f.seed)*0.002;f.mesh.position.x+=Math.sin(t*0.8+f.seed)*0.003});shiftingWalls.forEach(function(w){if(!w.mesh)return;w.active=Math.sin(t*0.72+w.phase)>0.35;var ty=w.active?1.7:-4;w.y=w.y+(ty-w.y)*Math.min(dt*6.5,1);if(Math.abs(w.y-ty)<0.05)w.y=ty;w.mesh.position.y=w.y;w.mesh.visible=w.y>-3.7;w.mesh.material.opacity=Math.max(0.18,Math.min(0.92,(w.y+4)/5.7));var solid=w.active&&w.y>-0.2;shiftingWallSolidCache[keyOf(w.r,w.c)]=solid});deadEndMarks.forEach(function(m,i){if(!m.mesh)return;m.mesh.rotation.y+=dt*2.8;if(m.mat)m.mat.emissiveIntensity=0.9+Math.sin(t*7+i)*0.55});if(goldenSnitch.mesh){goldenSnitch.wanderTimer-=dt;if(goldenSnitch.wanderTimer<=0){goldenSnitch.wanderTimer=1.0+Math.random()*2;goldenSnitch.velocity.set((Math.random()-0.5)*8,Math.sin(t*4)*2,(Math.random()-0.5)*8)}var tp=player.position.clone();tp.y=0;var sp=goldenSnitch.position.clone();sp.y=0;var dtp=sp.distanceTo(tp);if(dtp<7){var away=sp.clone().sub(tp).normalize().multiplyScalar(8);goldenSnitch.velocity.lerp(away,dt*5)}var ns=goldenSnitch.position.clone().addScaledVector(goldenSnitch.velocity,dt);var sc=worldToCell(ns.x,ns.z);if(isWallCell(sc.r,sc.c)){goldenSnitch.velocity.x*=-0.8;goldenSnitch.velocity.z*=-0.8}else{goldenSnitch.position.copy(ns)}goldenSnitch.position.y=1.8+Math.sin(t*4)*0.5;goldenSnitch.mesh.position.copy(goldenSnitch.position);goldenSnitch.mesh.rotation.y+=dt*4;if(goldenSnitch.light)goldenSnitch.light.position.copy(goldenSnitch.position)}if(ghostPathMarkers.length>0){var fp=guideUntil>0?Math.max(0,(guideUntil-performance.now())/6000):0;for(var gi=0;gi<ghostPathMarkers.length;gi++){var gm=ghostPathMarkers[gi];if(gm.mat)gm.mat.opacity=0.15+fp*0.55}if(performance.now()>guideUntil){clearGhostPath();guideUntil=0}}buffs.forEach(function(b,i){if(!b.mesh||b.collected)return;b.mesh.rotation.y+=dt*1.4;b.mesh.position.y=0.85+Math.sin(t*2.2+i)*0.12;if(b.light)b.light.intensity=1.4+Math.sin(t*4.5+i)*0.35});if(patronusBeam.active){var el=(performance.now()-patronusBeam.startTime)/1000,prog=Math.min(el/patronusBeam.duration,1);var pos=new THREE.Vector3().lerpVectors(patronusBeam.origin,patronusBeam.target,prog);if(patronusBeam.mesh){patronusBeam.mesh.position.copy(pos);patronusBeam.mesh.lookAt(patronusBeam.target);patronusBeam.mesh.rotation.x+=Math.PI/2;patronusBeam.mesh.scale.y=Math.min(prog*8,8);patronusBeam.mesh.material.opacity=0.9*(1-prog*0.5)}if(patronusBeam.light)patronusBeam.light.position.copy(pos);if(patronusBeam.particles){for(var pi=0;pi<patronusBeam.particles.length;pi++){var pp=patronusBeam.particles[pi];var pProg=Math.min(prog+pi*0.04,1);pp.position.lerpVectors(patronusBeam.origin,patronusBeam.target,pProg);pp.position.x+=(Math.random()-0.5)*0.4;pp.position.y+=(Math.random()-0.5)*0.4;pp.material.opacity=0.8*(1-pProg)}}if(prog>=1){if(patronusTarget&&!patronusTarget.banished){patronusTarget.banished=true;patronusTarget.banishTimer=15+Math.random()*10;housePoints+=50;setMessage("呼神护卫击中了摄魂怪！+50 分。它暂时消散了。",3);playChord([523,784,1046],0.3,0.08);dementorAura=false;document.body.classList.remove("dementor","shake")}patronusTarget=null;clearPatronusBeam()}}}
-function updateExitReveal(){var cup=scene.getObjectByName("triwizardCup"),flame=scene.getObjectByName("cupFlame"),light=scene.getObjectByName("cupLight"),ep=cellToWorld(exitCell.r,exitCell.c),dist=Math.hypot(ep.x-player.position.x,ep.z-player.position.z),near=dist<CELL*3.2,reveal=cupKeyObtained||near||gameState==="won";if(cup){cup.visible=reveal;cup.scale.setScalar(cupKeyObtained?1:0.86)}if(flame&&flame.material){flame.visible=reveal;flame.material.opacity=cupKeyObtained?0.9:0.42}if(light){light.intensity=cupKeyObtained?3.4:near?0.9:0;light.distance=cupKeyObtained?10:5}exitParticles.forEach(function(p){if(!p.mesh)return;p.mesh.visible=cupKeyObtained||dist<CELL*2.6;if(p.mesh.material)p.mesh.material.opacity=Math.min(p.mesh.material.opacity,cupKeyObtained?0.55:0.22)})}
+function updateExitReveal(){var cup=scene.getObjectByName("triwizardCup"),flame=scene.getObjectByName("cupFlame"),light=scene.getObjectByName("cupLight"),ep=cellToWorld(exitCell.r,exitCell.c),dist=Math.hypot(ep.x-player.position.x,ep.z-player.position.z),near=dist<CELL*3.2,reveal=cupKeyObtained||near||gameState===GAME_STATES.GAMEOVER;if(cup){cup.visible=reveal;cup.scale.setScalar(cupKeyObtained?1:0.86)}if(flame&&flame.material){flame.visible=reveal;flame.material.opacity=cupKeyObtained?0.9:0.42}if(light){light.intensity=cupKeyObtained?3.4:near?0.9:0;light.distance=cupKeyObtained?10:5}exitParticles.forEach(function(p){if(!p.mesh)return;p.mesh.visible=cupKeyObtained||dist<CELL*2.6;if(p.mesh.material)p.mesh.material.opacity=Math.min(p.mesh.material.opacity,cupKeyObtained?0.55:0.22)})}
 function updatePlayer(dt){var forward=new THREE.Vector3(-Math.sin(yaw),0,-Math.cos(yaw)),right=new THREE.Vector3(Math.cos(yaw),0,-Math.sin(yaw)),input=new THREE.Vector3();var mi=getMoveInput();if(mi.z!==0)input.add(forward.clone().multiplyScalar(mi.z));if(mi.x!==0)input.add(right.clone().multiplyScalar(mi.x));if(input.lengthSq()>0)input.normalize();var ws=keys.has("ShiftLeft")||keys.has("ShiftRight")||sprintToggled,fs=performance.now()<freeSprintUntil,cs=ws&&!dementorAura&&input.lengthSq()>0&&(sprintEnergy>0.05||fs);isSprinting=cs;if(btnSprint){if(fs)btnSprint.classList.add("boosting");else btnSprint.classList.remove("boosting")}var sl=snare?0.3:1,sb=cs?SPRINT_SPEED:1,target=input.multiplyScalar(WALK_SPEED*sb*sl);velocity.x=THREE.MathUtils.damp(velocity.x,target.x,12,dt);velocity.z=THREE.MathUtils.damp(velocity.z,target.z,12,dt);if(cs&&!fs&&input.lengthSq()>0.01)sprintEnergy=Math.max(0,sprintEnergy-dt*SPRINT_DRAIN);else if(!cs||input.lengthSq()<0.01)sprintEnergy=Math.min(1,sprintEnergy+dt*SPRINT_RECOVERY);moveWithCollision(velocity.x*dt,velocity.z*dt);player.cell=worldToCell(player.position.x,player.position.z);var moving=Math.hypot(velocity.x,velocity.z)>0.65,fg=isSprinting?260:450;if(moving&&performance.now()-lastFootstep>fg){lastFootstep=performance.now();playFootstep(isSprinting?0.048:0.028)}}
 function moveWithCollision(dx,dz){var nx=player.position.x+dx;if(!checkXCollision(nx,player.position.z,dx))player.position.x=nx;else velocity.x=0;var nz=player.position.z+dz;if(!checkZCollision(player.position.x,nz,dz))player.position.z=nz;else velocity.z=0}
 function checkXCollision(x,z,dx){var s=dx>0?1:-1;return isSolidSingle(x+s*PLAYER_RADIUS,z)}
@@ -547,18 +656,18 @@ function updateSentinel2(dt,t){if(currentDifficulty!=="hard"||!sentinel2.mesh)re
 function isAnyBlastEndedCharging(){return blastEndedPack.some(function(be){return be.mesh&&be.state==="charge"})}
 function updateBlastEnded(be,dt,t){if(!be.mesh)return;var cfg=GAME_BALANCE.blastEnded,pf=new THREE.Vector3(player.position.x,0.62,player.position.z),dist=be.position.distanceTo(pf);be.hitTimer=Math.max(0,be.hitTimer-dt);be.listenTimer=Math.max(0,be.listenTimer-dt);if(be.state==="stunned"){be.stunTimer-=dt;if(be.stunTimer<=0)be.state="patrol"}else if(be.state==="charge"){var nx=be.position.clone().addScaledVector(be.chargeDir,dt*cfg.chargeSpeed);if(isSolidWorldCollideAll(nx.x,nx.z)||be.position.distanceTo(be.chargeTarget)<0.45){be.state="stunned";be.stunTimer=cfg.stunSeconds;playNoiseBurst(0.12,0.06)}else{be.position.copy(nx)}}else{be.patrolPhase+=dt;var home=cellToWorld(be.home.r,be.home.c);be.position.x=home.x+Math.sin(be.patrolPhase*0.55)*cfg.patrolRadiusX;be.position.z=home.z+Math.cos(be.patrolPhase*0.45)*cfg.patrolRadiusZ;var hidden=currentHero&&currentHero._vanishUntil&&performance.now()<currentHero._vanishUntil;var heard=!hidden&&isSprinting&&dist<cfg.hearingRange&&hasLineOfSight(be.position,player.position),smelled=!hidden&&dist<cfg.smellRange&&!snare;if(heard||smelled){be.state="charge";be.listenTimer=2;be.chargeTarget.copy(pf);be.chargeDir.copy(pf).sub(be.position).normalize();setMessage(heard?"炸尾螺听见了疾跑声，正朝声音暴冲！":"炸尾螺嗅到你靠近，尾刺猛然发亮！",2);playNoiseBurst(0.16,0.1)}}if(dist<cfg.hitRange&&be.hitTimer<=0){be.hitTimer=cfg.hitCooldown;damage(BLAST_DMG,"炸尾螺狠狠撞上你。");be.state="stunned";be.stunTimer=cfg.stunSeconds}be.mesh.position.copy(be.position);if(be.light)be.light.position.set(be.position.x,1,be.position.z);if(be.chargeDir.x!==0||be.chargeDir.z!==0)be.mesh.rotation.y=Math.atan2(be.chargeDir.x,be.chargeDir.z);if(be.light)be.light.intensity=be.state==="charge"?3.2+Math.sin(t*18):be.listenTimer>0?1.8:1.0}
 function updateGameRules(dt){timeLeft-=dt;wandPower=Math.max(WAND_MIN,wandPower-dt*WAND_DECAY*heroWandDecay);var tc=traps.find(function(t){return t.r===player.cell.r&&t.c===player.cell.c});if(tc&&!snare){snare={trap:tc,presses:0,damageTimer:0};tc.mesh.material.emissive.setHex(0x3f0d06);document.body.classList.add("snared");setMessage("魔鬼网缠住了你！快速连续点击互动按钮施展火焰熊熊。",4);playTone(118,0.16,"triangle",0.06);playNoiseBurst(0.24,0.045)}if(snare){snare.damageTimer+=dt;if(snare.damageTimer>=1){snare.damageTimer=0;damage(SNARE_DMG,"魔鬼网勒紧了脚踝，点击互动按钮挣脱："+snare.presses+"/5")}}var cr=shiftingWalls.some(function(w){return isShiftingWallSolid(w)&&w.r===player.cell.r&&w.c===player.cell.c});if(cr)damage(WALL_CRUSH_DMG*dt,"位移树篱从地下升起，正在挤压你。");collectNearbyItems();if(timeLeft<=0)endGame(false,"时间耗尽，被迷宫吞噬。");if(health<=0)endGame(false,"你倒在了黑暗的树篱中。");updateHud()}
-function interact(){if(gameState==="quiz")return;if(gameState!=="playing")return;if(snare){snare.presses+=1;playTone(260+snare.presses*55,0.05,"square",0.05);playNoiseBurst(0.05,0.02);if(snare.presses===1)speakSpell("火焰熊熊！");setMessage("火焰熊熊："+snare.presses+"/5",0.8);if(snare.presses>=5){snare.trap.mesh.material.emissive.setHex(0x220600);snare=null;document.body.classList.remove("snared");setMessage("火光烧断藤蔓，你挣脱了魔鬼网。",2.4);playChord([330,494,740],0.16,0.05)}return}if(canCastPatronus()){castPatronus();return}var cd=distanceToCell(exitCell.r,exitCell.c);if(cd<3.5){if(!cupKeyObtained){setMessage("火龙杯被强大的魔法封印保护着。找到守钥的斯芬克斯才能解锁。",3);return}endGame(true,"你握住火龙杯，蓝白色火焰撕开了迷宫的出口。三强争霸赛的冠军诞生了！");return}var sphinx=sphinxes.find(function(s){return!s.solved&&distanceToCell(s.r,s.c)<2.8});if(sphinx){openQuiz(sphinx);return}setMessage("附近没有可互动的魔法痕迹。卷轴 "+scrollCharges+" 个 | 疾跑 "+Math.round(sprintEnergy*100)+"%",1.5)}
-function useWeapon(){if(!currentHero||!currentHero.weapon){setMessage("未选择角色，无法使用武器。",1.5);return}if(weaponCooldown>0){setMessage("武器冷却中: "+Math.ceil(weaponCooldown)+"秒",1);return}if(currentHero.weapon()){weaponCooldown=currentHero.weaponCD;}}
+function interact(){if(gameState===GAME_STATES.QUIZ)return;if(gameState!==GAME_STATES.PLAYING)return;if(snare){snare.presses+=1;playTone(260+snare.presses*55,0.05,"square",0.05);playNoiseBurst(0.05,0.02);if(snare.presses===1)speakSpell("火焰熊熊！");setMessage("火焰熊熊："+snare.presses+"/5",0.8);if(snare.presses>=5){snare.trap.mesh.material.emissive.setHex(0x220600);snare=null;document.body.classList.remove("snared");setMessage("火光烧断藤蔓，你挣脱了魔鬼网。",2.4);playChord([330,494,740],0.16,0.05)}return}if(canCastPatronus()){castPatronus();return}var cd=distanceToCell(exitCell.r,exitCell.c);if(cd<3.5){if(!cupKeyObtained){setMessage("火龙杯被强大的魔法封印保护着。找到守钥的斯芬克斯才能解锁。",3);return}endGame(true,"你握住火龙杯，蓝白色火焰撕开了迷宫的出口。三强争霸赛的冠军诞生了！");return}var sphinx=sphinxes.find(function(s){return!s.solved&&distanceToCell(s.r,s.c)<2.8});if(sphinx){openQuiz(sphinx);return}setMessage("附近没有可互动的魔法痕迹。卷轴 "+scrollCharges+" 个 | 疾跑 "+Math.round(sprintEnergy*100)+"%",1.5)}
+function useWeapon(){if(gameState!==GAME_STATES.PLAYING&&gameState!==GAME_STATES.QUIZ){return}if(!currentHero||!currentHero.weapon){setMessage("未选择角色，无法使用武器。",1.5);return}if(weaponCooldown>0){setMessage("武器冷却中: "+Math.ceil(weaponCooldown)+"秒",1);return}if(currentHero.weapon()){weaponCooldown=currentHero.weaponCD;}}
 function canCastPatronus(){if(patronusBeam.active)return false;patronusTarget=findPatronusTarget();return!!patronusTarget}
 function findPatronusTarget(){if(patronusBeam.active)return null;var cfg=GAME_BALANCE.patronus,candidates=[sentinel,sentinel2],best=null,bestScore=-999;for(var i=0;i<candidates.length;i++){var s=candidates[i];if(!s.mesh||s.banished||s.mesh.visible===false)continue;var pf=new THREE.Vector3(player.position.x,1.02,player.position.z),dist=s.position.distanceTo(pf);if(dist>cfg.aimRange)continue;if(!hasLineOfSight(player.position,s.position))continue;var aimed=isReticleOnTarget(s.position,1.55),close=dist<=cfg.closeRange,assist=dist<=cfg.assistRange&&(isMobile||dementorAura);if(!aimed&&!close&&!assist)continue;var score=(aimed?80:0)+(close?55:0)+(assist?35:0)-dist;if(score>bestScore){best=s;bestScore=score}}return best}
 function isReticleOnTarget(tp,rad){var cd=new THREE.Vector3(-Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch));cd.normalize();var cp=player.position.clone();cp.y=PLAYER_HEIGHT;var oc=cp.clone().sub(tp);var a=cd.dot(cd),b=2*oc.dot(cd),c=oc.dot(oc)-rad*rad;return b*b-4*a*c>=0}
 function castPatronus(){if(!patronusTarget)return;speakSpell("呼神护卫！");var orig=new THREE.Vector3(player.position.x,PLAYER_HEIGHT*0.7,player.position.z);var tgt=patronusTarget.position.clone();tgt.y=1.3;var bg=new THREE.CylinderGeometry(0.08,0.15,1,8),bm=new THREE.MeshBasicMaterial({color:0xffdd66,transparent:true,opacity:0.9});var beam=new THREE.Mesh(bg,bm);beam.position.copy(orig);beam.castShadow=false;scene.add(beam);var glow=new THREE.PointLight(0xffdd66,8,18);glow.position.copy(orig);scene.add(glow);var parts=[],pg=new THREE.SphereGeometry(0.06,6,6);for(var i=0;i<12;i++){var p=new THREE.Mesh(pg,bm.clone());p.position.copy(orig);scene.add(p);parts.push(p)}patronusBeam.active=true;patronusBeam.mesh=beam;patronusBeam.light=glow;patronusBeam.particles=parts;patronusBeam.target.copy(tgt);patronusBeam.origin.copy(orig);patronusBeam.startTime=performance.now();playChord([392,523,659,784],0.35,0.07);playTone(1046,0.25,"sine",0.05,0.1)}
 function speakSpell(text){try{if(typeof SpeechSynthesisUtterance!=='undefined'&&'speechSynthesis' in window){window.speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(text);u.lang='zh-CN';u.rate=0.95;u.pitch=1.25;u.volume=1.0;window.speechSynthesis.speak(u)}}catch(e){}}
-function openQuiz(s){currentQuiz=s;gameState="quiz";try{document.exitPointerLock()}catch(e){}var d=quizData[s.quizIndex%quizData.length];quizQuestionEl.textContent=d.question;quizOptionsEl.innerHTML="";var order=[];for(var oi=0;oi<d.options.length;oi++)order.push(oi);for(var oi=order.length-1;oi>0;oi--){var j=Math.floor(Math.random()*(oi+1));var t=order[oi];order[oi]=order[j];order[j]=t}currentQuiz._order=order;currentQuiz._data=d;order.forEach(function(origIdx){var b=document.createElement("button");b.type="button";b.textContent=d.options[origIdx];b.addEventListener("click",function(){answerQuiz(origIdx)});quizOptionsEl.appendChild(b)});quizPanel.classList.remove("hidden");setMessage("斯芬克斯挡住去路。答题期间迷宫的时间仍在流逝。",3)}
-function answerQuiz(i){if(!currentQuiz)return;var d=quizData[currentQuiz.quizIndex%quizData.length];quizPanel.classList.add("hidden");gameState="playing";try{canvas.requestPointerLock()}catch(e){}if(i===d.answer){currentQuiz.solved=true;if(currentQuiz.mesh)currentQuiz.mesh.visible=false;housePoints+=30;openSphinxPassage(currentQuiz);setMessage("斯芬克斯低头让路，前方的魔法屏障消散。一道栅栏门轰然开启！",3);playChord([523,659,988],0.22,0.055);speakSpell("答对了！")}else{damage(SPHINX_DMG,"答案错误。斯芬克斯发出尖啸，摄魂怪立刻追来。","sphinx");sentinel.forcedChaseTimer=9;playNoiseBurst(0.24,0.12)}currentQuiz=null}
+function openQuiz(s){currentQuiz=s;setGameState(GAME_STATES.QUIZ);try{document.exitPointerLock()}catch(e){}var d=quizData[s.quizIndex%quizData.length];quizQuestionEl.textContent=d.question;quizOptionsEl.innerHTML="";var order=[];for(var oi=0;oi<d.options.length;oi++)order.push(oi);for(var oi=order.length-1;oi>0;oi--){var j=Math.floor(Math.random()*(oi+1));var t=order[oi];order[oi]=order[j];order[j]=t}currentQuiz._order=order;currentQuiz._data=d;order.forEach(function(origIdx){var b=document.createElement("button");b.type="button";b.textContent=d.options[origIdx];b.addEventListener("click",function(){answerQuiz(origIdx)});quizOptionsEl.appendChild(b)});quizPanel.classList.remove("hidden");setMessage("斯芬克斯挡住去路。答题期间迷宫的时间仍在流逝。",3)}
+function answerQuiz(i){if(!currentQuiz)return;var d=quizData[currentQuiz.quizIndex%quizData.length];quizPanel.classList.add("hidden");setGameState(GAME_STATES.PLAYING);try{canvas.requestPointerLock()}catch(e){}if(i===d.answer){currentQuiz.solved=true;if(currentQuiz.mesh)currentQuiz.mesh.visible=false;housePoints+=30;openSphinxPassage(currentQuiz);setMessage("斯芬克斯低头让路，前方的魔法屏障消散。一道栅栏门轰然开启！",3);playChord([523,659,988],0.22,0.055);speakSpell("答对了！")}else{damage(SPHINX_DMG,"答案错误。斯芬克斯发出尖啸，摄魂怪立刻追来。","sphinx");sentinel.forcedChaseTimer=9;playNoiseBurst(0.24,0.12)}currentQuiz=null}
 function openSphinxPassage(s){s.barrier.visible=false;if(s.linkedGateIdx!==undefined&&s.linkedGateIdx>=0&&s.linkedGateIdx<gates.length){var g=gates[s.linkedGateIdx];g.open=true;if(g.mesh)g.mesh.visible=false}if(s.isKeySphinx){cupKeyObtained=true;setMessage("斯芬克斯消散时掉落了一把古老的钥匙——火龙杯的封印解除了！",4);playChord([440,554,659,880],0.4,0.08)}}
-function markDeadEnd(){if(gameState!=="playing")return;var cell=player.cell,targetCell=null;var range=heroDeadEndR||0;if(range>0){for(var dr=-range;dr<=range&&!targetCell;dr++){for(var dc=-range;dc<=range&&!targetCell;dc++){if(dr===0&&dc===0)continue;var nr=player.cell.r+dr,nc=player.cell.c+dc;if(nr<0||nc<0||nr>=mapHeight()||nc>=mapWidth())continue;if(isWallCell(nr,nc))continue;if(markerCells.has(keyOf(nr,nc)))continue;if(isDeadEndCell(nr,nc))targetCell={r:nr,c:nc}}}}if(!targetCell&&!isDeadEndCell(cell.r,cell.c)){if(range>0)setMessage("附近也没有发现死胡同。",1.4);else setMessage("这里还不是死胡同。把标记留给真正容易迷路的位置。",2);return}var tr=targetCell?targetCell.r:cell.r,tc=targetCell?targetCell.c:cell.c,k=keyOf(tr,tc);if(markerCells.has(k)){setMessage("这里已经留下红色死胡同标记。",1.4);return}var pos=cellToWorld(tr,tc);var mat=new THREE.MeshStandardMaterial({color:0xff2b2b,emissive:0xff1111,emissiveIntensity:1.2,roughness:0.3});var group=new THREE.Group();var a=new THREE.Mesh(new THREE.BoxGeometry(1.45,0.045,0.18),mat);var b=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.045,1.45),mat);group.add(a,b);group.position.set(pos.x,0.06,pos.z);scene.add(group);markerCells.add(k);deadEndMarks.push({r:tr,c:tc,mesh:group,mat:mat});housePoints+=10;setMessage("红色十字星已标记：这是一条死胡同。+10 分",2);playTone(196,0.08,"square",0.04);speakSpell("标记死路！")}
-function useScroll(){if(gameState!=="playing")return;if(scrollCharges<=0){setMessage("没有透视卷轴。在死胡同中寻找道具吧。",1.6);return}scrollCharges-=1;guideUntil=performance.now()+6000;showGhostPath();playChord([294,440,880],0.2,0.045);speakSpell("急急现形！")}
+function markDeadEnd(){if(gameState!==GAME_STATES.PLAYING)return;var cell=player.cell,targetCell=null;var range=heroDeadEndR||0;if(range>0){for(var dr=-range;dr<=range&&!targetCell;dr++){for(var dc=-range;dc<=range&&!targetCell;dc++){if(dr===0&&dc===0)continue;var nr=player.cell.r+dr,nc=player.cell.c+dc;if(nr<0||nc<0||nr>=mapHeight()||nc>=mapWidth())continue;if(isWallCell(nr,nc))continue;if(markerCells.has(keyOf(nr,nc)))continue;if(isDeadEndCell(nr,nc))targetCell={r:nr,c:nc}}}}if(!targetCell&&!isDeadEndCell(cell.r,cell.c)){if(range>0)setMessage("附近也没有发现死胡同。",1.4);else setMessage("这里还不是死胡同。把标记留给真正容易迷路的位置。",2);return}var tr=targetCell?targetCell.r:cell.r,tc=targetCell?targetCell.c:cell.c,k=keyOf(tr,tc);if(markerCells.has(k)){setMessage("这里已经留下红色死胡同标记。",1.4);return}var pos=cellToWorld(tr,tc);var mat=new THREE.MeshStandardMaterial({color:0xff2b2b,emissive:0xff1111,emissiveIntensity:1.2,roughness:0.3});var group=new THREE.Group();var a=new THREE.Mesh(new THREE.BoxGeometry(1.45,0.045,0.18),mat);var b=new THREE.Mesh(new THREE.BoxGeometry(0.18,0.045,1.45),mat);group.add(a,b);group.position.set(pos.x,0.06,pos.z);scene.add(group);markerCells.add(k);deadEndMarks.push({r:tr,c:tc,mesh:group,mat:mat});housePoints+=10;setMessage("红色十字星已标记：这是一条死胡同。+10 分",2);playTone(196,0.08,"square",0.04);speakSpell("标记死路！")}
+function useScroll(){if(gameState!==GAME_STATES.PLAYING)return;if(scrollCharges<=0){setMessage("没有透视卷轴。在死胡同中寻找道具吧。",1.6);return}scrollCharges-=1;guideUntil=performance.now()+6000;showGhostPath();playChord([294,440,880],0.2,0.045);speakSpell("急急现形！")}
 var ghostPathMarkers=[];
 function showGhostPath(){clearGhostPath();var path=bfsShortestPath(player.cell.r,player.cell.c,exitCell.r,exitCell.c);if(!path||path.length<2)return;var mg=new THREE.RingGeometry(0.25,0.35,8),mm=new THREE.MeshBasicMaterial({color:0x88ccff,transparent:true,opacity:0.7,side:THREE.DoubleSide});var step=Math.max(1,Math.floor(path.length/15));for(var i=0;i<path.length;i+=step){var cell=path[i],pos=cellToWorld(cell.r,cell.c);var m=new THREE.Mesh(mg,mm.clone());m.rotation.x=-Math.PI/2;m.position.set(pos.x,0.08,pos.z);scene.add(m);ghostPathMarkers.push({mesh:m,mat:m.material})}var ep=cellToWorld(exitCell.r,exitCell.c);var pg=new THREE.CylinderGeometry(0.15,0.15,4,8);var p=new THREE.Mesh(pg,new THREE.MeshBasicMaterial({color:0x66bbff,transparent:true,opacity:0.6}));p.position.set(ep.x,2,ep.z);p.name="ghostPillar";scene.add(p);ghostPathMarkers.push({mesh:p,mat:p.material,isPillar:true})}
 function clearGhostPath(){for(var i=0;i<ghostPathMarkers.length;i++){var m=ghostPathMarkers[i];scene.remove(m.mesh);m.mesh.geometry.dispose();m.mat.dispose()}ghostPathMarkers.length=0}
@@ -571,8 +680,8 @@ function updateCamera(t){camera.position.copy(player.position);camera.rotation.y
 function respawnSnitch(){var h=mapHeight(),w=mapWidth();for(var a=0;a<50;a++){var r=3+Math.floor(Math.random()*(h-6)),c=3+Math.floor(Math.random()*(w-6));if(!isWallCell(r,c)){var pos=cellToWorld(r,c);var dist=Math.hypot(pos.x-player.position.x,pos.z-player.position.z);if(dist>6){goldenSnitch.position.set(pos.x,1.8,pos.z);goldenSnitch.mesh.position.copy(goldenSnitch.position);if(goldenSnitch.light)goldenSnitch.light.position.copy(goldenSnitch.position);goldenSnitch.mesh.visible=true;if(goldenSnitch.light)goldenSnitch.light.visible=true;goldenSnitch.home={r:r,c:c};goldenSnitch.velocity.set((Math.random()-0.5)*5,0,(Math.random()-0.5)*5);setMessage("金色飞贼重新出现了！快抓住它！",2.5);return}}}}
 function clearPatronusBeam(){if(patronusBeam.mesh){scene.remove(patronusBeam.mesh);patronusBeam.mesh.geometry.dispose();patronusBeam.mesh.material.dispose()}if(patronusBeam.light)scene.remove(patronusBeam.light);if(patronusBeam.particles){for(var i=0;i<patronusBeam.particles.length;i++){var p=patronusBeam.particles[i];scene.remove(p);p.geometry.dispose();p.material.dispose()}}patronusBeam.active=false;patronusBeam.mesh=null;patronusBeam.light=null;patronusBeam.particles=null}
 function updateHud(){timeEl.textContent=formatTime(timeLeft);healthEl.textContent=""+Math.max(0,Math.ceil(health));wandEl.textContent=Math.round(wandPower*100)+"%";var se=document.querySelector("#score");if(se)se.textContent=""+housePoints;if(deadEndCountEl)deadEndCountEl.textContent=""+deadEndMarks.length;var sf=document.querySelector("#stamina-fill");if(sf){var pct=Math.round(sprintEnergy*100);sf.style.width=pct+"%";sf.className=freeSprintUntil>performance.now()?"boosting":pct<25?"low":""}if(btnWeapon&&currentHero){var cdPct=currentHero.weaponCD>0?(weaponCooldown/currentHero.weaponCD)*100:0;btnWeapon.textContent=weaponCooldown>0?Math.ceil(weaponCooldown)+"s":"武器R";btnWeapon.style.setProperty("--cooldown-pct",(100-cdPct)+"%");if(weaponCooldown>0)btnWeapon.classList.add("cooldown");else btnWeapon.classList.remove("cooldown")}}
-function damage(amount,text,type){if(gameState!=="playing"&&gameState!=="quiz")return;if(currentHero&&currentHero._vanishUntil&&performance.now()<currentHero._vanishUntil)return;if(currentHero&&currentHero.passive)amount=currentHero.passive(amount,type||"");health=Math.max(0,health-amount);setMessage(text,1.5);document.body.classList.add("damaged");window.clearTimeout(damage._timer);damage._timer=window.setTimeout(function(){document.body.classList.remove("damaged")},140)}
-function endGame(won,copy){if(gameState!=="playing"&&gameState!=="quiz")return;gameState=won?"won":"lost";try{document.exitPointerLock()}catch(e){}quizPanel.classList.add("hidden");resultTitle.textContent=won?"你夺得了火龙杯":"迷宫吞没了你";var sm=won?" | 学院分: "+housePoints:"";resultCopy.textContent=copy+sm;resultPanel.classList.remove("hidden");document.body.classList.remove("snared","dementor","shake","ceremony");stopAmbientDrone();  recordGameResult(won,housePoints,health);playChord(won?[392,523,659,1046]:[90,72,55],won?0.45:0.55,won?0.07:0.06);speakSpell(won?"我们赢了！三强争霸赛的冠军！":"你倒在了黑暗的树篱中...")}
+function damage(amount,text,type){if(gameState!==GAME_STATES.PLAYING&&gameState!==GAME_STATES.QUIZ)return;if(currentHero&&currentHero._vanishUntil&&performance.now()<currentHero._vanishUntil)return;if(currentHero&&currentHero.passive)amount=currentHero.passive(amount,type||"");health=Math.max(0,health-amount);setMessage(text,1.5);document.body.classList.add("damaged");window.clearTimeout(damage._timer);damage._timer=window.setTimeout(function(){document.body.classList.remove("damaged")},140)}
+function endGame(won,copy){if(gameState!==GAME_STATES.PLAYING&&gameState!==GAME_STATES.QUIZ)return;setGameState(GAME_STATES.GAMEOVER);try{document.exitPointerLock()}catch(e){}quizPanel.classList.add("hidden");resultTitle.textContent=won?"你夺得了火龙杯":"迷宫吞没了你";var sm=won?" | 学院分: "+housePoints:"";resultCopy.textContent=copy+sm;document.body.classList.remove("snared","dementor","shake","ceremony");stopAmbientDrone();recordGameResult(won,housePoints,health);playChord(won?[392,523,659,1046]:[90,72,55],won?0.45:0.55,won?0.07:0.06);speakSpell(won?"我们赢了！三强争霸赛的冠军！":"你倒在了黑暗的树篱中...")}
 function setMessage(text,seconds){if(seconds===void 0)seconds=2;messageEl.textContent=text;messageEl.dataset.temporary="active";window.clearTimeout(setMessage._timer);setMessage._timer=window.setTimeout(function(){messageEl.dataset.temporary="done"},seconds*1000)}
 function isSolidWorldCollideAll(x,z){var samples=[[x-0.5,z-0.5],[x+0.5,z-0.5],[x-0.5,z+0.5],[x+0.5,z+0.5]];return samples.some(function(p){var cell=worldToCell(p[0],p[1]);if(cell.r<0||cell.c<0||cell.r>=mapHeight()||cell.c>=mapWidth())return true;if(solids.has(keyOf(cell.r,cell.c)))return true;if(isGateCell(cell.r,cell.c))return true;if(isQuizBarrierCell(cell.r,cell.c))return true;return!!shiftingWallSolidCache[keyOf(cell.r,cell.c)]})}
 function isWallCell(r,c){if(r<0||c<0||r>=mapHeight()||c>=mapWidth())return true;if(solids.has(keyOf(r,c)))return true;if(isGateCell(r,c))return true;if(isQuizBarrierCell(r,c))return true;return!!shiftingWallSolidCache[keyOf(r,c)]}
@@ -610,13 +719,13 @@ if(btnScroll)btnScroll.addEventListener("pointerdown",function(e){e.preventDefau
 var allButtons=document.querySelectorAll(".mobile-btn");for(var bi=0;bi<allButtons.length;bi++){allButtons[bi].addEventListener("touchstart",function(e){e.preventDefault();e.stopPropagation()})}
 document.addEventListener("keydown",function(e){keys.add(e.code);if(e.code==="KeyE"){e.preventDefault();interact()}if(e.code==="KeyQ"){e.preventDefault();markDeadEnd()}if(e.code==="KeyF"){e.preventDefault();useScroll()}if(e.code==="KeyR"){e.preventDefault();useWeapon()}if(e.code==="ShiftLeft"||e.code==="ShiftRight"){keyboardSprint=true;if(btnSprint)btnSprint.classList.add("active")}});
 document.addEventListener("keyup",function(e){keys.delete(e.code);if(e.code==="ShiftLeft"||e.code==="ShiftRight"){keyboardSprint=false;if(btnSprint)btnSprint.classList.remove("active")}});
-document.addEventListener("pointerlockchange",function(){if(document.pointerLockElement!==canvas&&gameState==="playing"){setMessage("迷宫仍在低语。点击画面继续探索。",2.5)}});
-document.addEventListener("mousemove",function(e){if(document.pointerLockElement!==canvas||(gameState!=="playing"&&gameState!=="ceremony"))return;yaw-=e.movementX*0.004;pitch-=e.movementY*0.004;pitch=THREE.MathUtils.clamp(pitch,-1.2,1.2)});
-canvas.addEventListener("click",function(){if(gameState==="playing"||gameState==="ceremony"){try{canvas.requestPointerLock()}catch(e){}}});
+document.addEventListener("pointerlockchange",function(){if(document.pointerLockElement!==canvas&&gameState===GAME_STATES.PLAYING){setMessage("迷宫仍在低语。点击画面继续探索。",2.5)}});
+document.addEventListener("mousemove",function(e){if(document.pointerLockElement!==canvas||(gameState!==GAME_STATES.PLAYING&&gameState!==GAME_STATES.CEREMONY))return;yaw-=e.movementX*0.004;pitch-=e.movementY*0.004;pitch=THREE.MathUtils.clamp(pitch,-1.2,1.2)});
+canvas.addEventListener("click",function(){if(gameState===GAME_STATES.PLAYING||gameState===GAME_STATES.CEREMONY){try{canvas.requestPointerLock()}catch(e){}}});
 function isPanelOpen(el){return el&&!el.classList.contains("hidden")}
-function shouldRequireLandscape(){return !!(currentUser||isAdmin)&&!isPanelOpen(authPanel)&&!isPanelOpen(rulesPanel)}
+function shouldRequireLandscape(){return !!(currentUser||isAdmin)&&gameState!==GAME_STATES.AUTH&&gameState!==GAME_STATES.RULES}
 function checkOrientation(){var isLandscape=window.innerWidth>window.innerHeight,shouldShow=shouldRequireLandscape()&&!isLandscape;var hint=document.querySelector("#rotate-hint");if(hint){hint.classList.toggle("show",shouldShow);hint.classList.toggle("hidden",!shouldShow)}}
 window.addEventListener("resize",function(){camera.aspect=window.innerWidth/window.innerHeight;camera.updateProjectionMatrix();renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.2));checkOrientation()});
 window.addEventListener("orientationchange",function(){setTimeout(checkOrientation,300)});
 
-(function init(){if(typeof THREE==='undefined'){alert('Three.js库未能加载。请检查网络后刷新。');return}try{generateMaze();initWorld();checkOrientation();requestAnimationFrame(animate);overlay.classList.add("hidden")}catch(e){alert('初始化失败: '+(e.message||e)+'\n请刷新页面重试。')}})();
+(function init(){if(typeof THREE==='undefined'){alert('Three.js库未能加载。请检查网络后刷新。');return}try{resetLobby();initLobby();setGameState(GAME_STATES.AUTH);checkOrientation();startRenderLoop()}catch(e){alert('初始化失败: '+(e.message||e)+'\n请刷新页面重试。')}})();

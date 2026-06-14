@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>暮篱迷宫 - 三强争霸赛</title>
-    <link rel="stylesheet" href="./src/styles.css?v=20260614b" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260614c" />
   </head>
   <body>
     <main id="game-shell">
@@ -106,30 +106,41 @@
           </div>
         </div>
         <div id="hud-btns">
+          <button id="btn-settings" class="hud-btn" aria-label="设置">⚙</button>
           <button id="btn-stats" class="hud-btn">📊</button>
-          <button id="btn-admin" class="hud-btn hidden">⚙</button>
+          <button id="btn-admin" class="hud-btn hidden">管</button>
         </div>
         <div id="message">你站在拱门前，迷宫深不见底。</div>
         <div id="reticle"></div>
         <div id="interaction"></div>
       </section>
 
-      <section id="overlay" class="panel">
+      <section id="overlay" class="panel lobby-panel">
+        <div class="lobby-topline">三强争霸赛 · 最终试炼</div>
         <h1>暮篱迷宫</h1>
-        <p class="lobby-sub">三强争霸赛 · 最终试炼</p>
-
-        <div class="lobby-section">
-          <h3>选择难度</h3>
-          <div class="difficulty-tabs" id="diff-tabs">
-            <button class="diff-btn" data-diff="easy">简单</button>
-            <button class="diff-btn active" data-diff="medium">中档</button>
-            <button class="diff-btn" data-diff="hard">困难</button>
+        <div class="main-hall">
+          <button id="hero-prev" class="hero-switch" aria-label="上一个角色">‹</button>
+          <div class="hero-showcase" id="hero-showcase">
+            <div id="lobby-hero-avatar" class="hero-showcase-avatar harry-avatar">⚡</div>
+            <div>
+              <div id="lobby-hero-name" class="showcase-name">哈利·波特</div>
+              <div id="lobby-hero-title" class="showcase-title">格兰芬多找球手</div>
+            </div>
           </div>
+          <button id="hero-next" class="hero-switch" aria-label="下一个角色">›</button>
+
+          <aside class="hero-attribute-panel">
+            <h3>勇士档案</h3>
+            <dl>
+              <div><dt>速度</dt><dd id="hero-stat-speed">5.4</dd></div>
+              <div><dt>生命</dt><dd id="hero-stat-hp">100</dd></div>
+              <div><dt>被动</dt><dd id="hero-stat-passive">摄魂怪伤害减免40%</dd></div>
+              <div><dt>本命武器</dt><dd id="hero-stat-weapon">格兰芬多宝剑斩击</dd></div>
+            </dl>
+          </aside>
         </div>
 
-        <div class="lobby-section">
-          <h3>选择勇士</h3>
-          <div class="hero-cards" id="hero-cards">
+        <div class="hero-cards" id="hero-cards">
             <div class="hero-card" data-hero="harry">
               <div class="hero-avatar harry-avatar">⚡</div>
               <div class="hero-name">哈利·波特</div>
@@ -162,10 +173,42 @@
               <div class="hero-skill"><b>被动：</b>探照范围+25%，远距感知死路</div>
               <div class="hero-weapon"><b>道具R：</b>福灵剂排除2个错误答案</div>
             </div>
-          </div>
         </div>
 
-        <button id="start" class="btn-enter-maze">确认并踏入迷宫</button>
+        <button id="start" class="btn-enter-maze">踏入迷宫</button>
+      </section>
+
+      <section id="difficulty-panel" class="panel hidden">
+        <h2>选择迷宫强度</h2>
+        <p class="lobby-sub">确认后将生成新的迷宫</p>
+        <div class="difficulty-tabs difficulty-tabs--stack" id="diff-tabs">
+          <button class="diff-btn" data-diff="easy">
+            <strong>简单</strong>
+            <span>11x11 · 240秒 · 摄魂怪60% · 答错-15</span>
+          </button>
+          <button class="diff-btn active" data-diff="medium">
+            <strong>中档</strong>
+            <span>15x15 · 180秒 · 原版速度 · 答错-30</span>
+          </button>
+          <button class="diff-btn" data-diff="hard">
+            <strong>困难</strong>
+            <span>19x19 · 130秒 · 摄魂怪85% · 答错-50</span>
+          </button>
+        </div>
+        <div class="panel-actions">
+          <button id="difficulty-back" class="btn-secondary">返回大厅</button>
+          <button id="difficulty-confirm" class="btn-enter-maze">开始挑战</button>
+        </div>
+      </section>
+
+      <section id="settings-panel" class="panel hidden">
+        <h2>设置</h2>
+        <div class="settings-actions">
+          <button id="settings-restart">重新开始</button>
+          <button id="settings-lobby">回到大厅</button>
+          <button id="settings-rules" class="btn-secondary">查看规则</button>
+          <button id="settings-continue" class="btn-secondary">继续游戏</button>
+        </div>
       </section>
 
       <section id="quiz" class="panel hidden" aria-label="斯芬克斯谜题">
@@ -188,6 +231,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-    <script src="./src/main.js?v=20260614b"></script>
+    <script src="./src/main.js?v=20260614c"></script>
   </body>
 </html>
