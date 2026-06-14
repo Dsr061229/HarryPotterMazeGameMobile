@@ -374,6 +374,7 @@ var adminClose=document.querySelector("#admin-close"),adminUsers=document.queryS
 var statsPanel=document.querySelector("#stats-panel"),statsClose=document.querySelector("#stats-close");
 var myStats=document.querySelector("#my-stats"),leaderboard=document.querySelector("#leaderboard");
 var btnStats=document.querySelector("#btn-stats"),btnAdmin=document.querySelector("#btn-admin");
+var lobbyStats=document.querySelector("#lobby-stats"),settingsStats=document.querySelector("#settings-stats");
 
 if(authLogin)authLogin.addEventListener("click",doAuth);
 if(authUidEl)authUidEl.addEventListener("keydown",function(e){if(e.key==="Enter")doAuth()});
@@ -381,6 +382,8 @@ if(rulesOk)rulesOk.addEventListener("click",function(){var target=rulesReturnSta
 if(adminClose)adminClose.addEventListener("click",function(){adminPanel.classList.add("hidden")});
 if(statsClose)statsClose.addEventListener("click",function(){statsPanel.classList.add("hidden")});
 if(btnStats)btnStats.addEventListener("click",function(e){e.stopPropagation();showStats()});
+if(lobbyStats)lobbyStats.addEventListener("click",function(e){e.stopPropagation();showStats()});
+if(settingsStats)settingsStats.addEventListener("click",function(e){e.stopPropagation();showStats()});
 if(btnAdmin)btnAdmin.addEventListener("click",function(e){e.stopPropagation();showAdmin()});
 if(window.addEventListener)window.addEventListener("online",function(){flushPendingResults()});
 
@@ -572,7 +575,7 @@ function setGameState(next){
   var inRun=next===GAME_STATES.PLAYING||next===GAME_STATES.CEREMONY||next===GAME_STATES.QUIZ||next===GAME_STATES.SETTINGS;
   if(hud)hud.classList.toggle("hidden",next===GAME_STATES.AUTH||next===GAME_STATES.RULES||next===GAME_STATES.LOBBY||next===GAME_STATES.DIFFICULTY_SELECT);
   if(btnSettings)btnSettings.classList.toggle("hidden",!(next===GAME_STATES.PLAYING||next===GAME_STATES.CEREMONY));
-  if(btnStats)btnStats.classList.toggle("hidden",next===GAME_STATES.PLAYING||next===GAME_STATES.CEREMONY||next===GAME_STATES.SETTINGS);
+  if(btnStats)btnStats.classList.toggle("hidden",next===GAME_STATES.AUTH||next===GAME_STATES.RULES||next===GAME_STATES.GAMEOVER);
   if(mobileButtons)mobileButtons.classList.toggle("hidden",next!==GAME_STATES.PLAYING&&next!==GAME_STATES.CEREMONY);
   if(next===GAME_STATES.LOBBY){resetLobby();if(!lobbyReady)initLobby()}
   if(next===GAME_STATES.DIFFICULTY_SELECT){syncDifficultyUI();tryFullscreen()}

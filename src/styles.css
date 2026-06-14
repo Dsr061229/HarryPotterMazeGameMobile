@@ -302,6 +302,10 @@ body {
   z-index: 30;
 }
 
+#stats-panel {
+  z-index: 60;
+}
+
 .panel h1 {
   margin: 0 0 10px;
   font-size: clamp(28px, 7vw, 48px);
@@ -681,6 +685,7 @@ body.ceremony #game {
 .panel-actions,.settings-actions { display:grid; gap:10px; }
 .panel-actions { grid-template-columns:1fr 1.3fr; }
 .btn-secondary { background:rgba(255,255,255,0.1); color:#f3e9bd; border:1px solid rgba(244,234,190,0.22); }
+.lobby-rank-btn { margin-top:8px; }
 .settings-actions button { min-height:54px; }
 
 /* 角色卡片 */

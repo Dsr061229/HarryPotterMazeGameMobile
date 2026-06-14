@@ -7,7 +7,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>暮篱迷宫 - 三强争霸赛</title>
-    <link rel="stylesheet" href="./src/styles.css?v=20260614c" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260614d" />
   </head>
   <body>
     <main id="game-shell">
@@ -176,6 +176,7 @@
         </div>
 
         <button id="start" class="btn-enter-maze">踏入迷宫</button>
+        <button id="lobby-stats" class="btn-secondary lobby-rank-btn">查看排名</button>
       </section>
 
       <section id="difficulty-panel" class="panel hidden">
@@ -206,6 +207,7 @@
         <div class="settings-actions">
           <button id="settings-restart">重新开始</button>
           <button id="settings-lobby">回到大厅</button>
+          <button id="settings-stats" class="btn-secondary">查看排名</button>
           <button id="settings-rules" class="btn-secondary">查看规则</button>
           <button id="settings-continue" class="btn-secondary">继续游戏</button>
         </div>
@@ -231,6 +233,6 @@
     </main>
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-    <script src="./src/main.js?v=20260614c"></script>
+    <script src="./src/main.js?v=20260614d"></script>
   </body>
 </html>
