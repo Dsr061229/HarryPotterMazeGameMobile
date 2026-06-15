@@ -650,12 +650,13 @@ body.ceremony #game {
 .hero-attribute-panel { grid-column:3; grid-row:1; }
 .hero-showcase { min-height:330px; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; border-radius:8px; overflow:hidden; background:radial-gradient(circle at 50% 42%,rgba(245,214,110,0.18),transparent 34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0.22)); }
 .hero-showcase::before { content:""; position:absolute; width:240px; height:54px; bottom:42px; border-radius:50%; background:radial-gradient(ellipse,rgba(255,215,95,0.42),transparent 68%); filter:blur(2px); }
-.hero-showcase-avatar { width:170px; height:220px; border-radius:46% 46% 18% 18%; display:flex; align-items:center; justify-content:center; font-size:82px; position:relative; box-shadow:0 0 42px rgba(224,197,101,0.34), inset 0 0 36px rgba(255,255,255,0.08); transform:translateY(-8px); }
-.hero-showcase-avatar::after { content:""; position:absolute; inset:-18px; border:1px solid rgba(255,230,140,0.26); border-radius:inherit; filter:drop-shadow(0 0 16px rgba(255,218,120,0.32)); }
-.hero-figure--harry { background:linear-gradient(160deg,#9d2525,#321010 64%,#111); }
-.hero-figure--cedric { background:linear-gradient(160deg,#d4af2e,#4d3610 66%,#151008); }
-.hero-figure--viktor { background:linear-gradient(160deg,#315f8e,#101b2c 66%,#070b12); }
-.hero-figure--fleur { background:linear-gradient(160deg,#89aee4,#344d78 60%,#111827); }
+.hero-showcase-avatar { width:210px; height:250px; border-radius:8px; display:flex; align-items:center; justify-content:center; position:relative; transform:translateY(-8px); background:linear-gradient(180deg,rgba(255,255,255,0.07),rgba(0,0,0,0.18)); box-shadow:0 24px 42px rgba(0,0,0,0.34); color:transparent; animation:hero-showcase-float 3.6s ease-in-out infinite; }
+.hero-showcase-avatar::before { content:""; position:absolute; inset:-20px -28px -12px; background:var(--hero-image) center bottom / contain no-repeat; filter:drop-shadow(0 18px 16px rgba(0,0,0,0.52)) drop-shadow(0 0 18px rgba(224,197,101,0.26)); }
+.hero-showcase-avatar::after { content:""; position:absolute; left:15%; right:15%; bottom:-18px; height:34px; border-radius:50%; background:radial-gradient(ellipse,rgba(255,215,95,0.35),rgba(0,0,0,0.05) 68%,transparent 72%); filter:blur(2px); transform:perspective(220px) rotateX(64deg); }
+.hero-figure--harry { --hero-glow:#7dbfff; }
+.hero-figure--cedric { --hero-glow:#e0c565; }
+.hero-figure--viktor { --hero-glow:#78a8e8; }
+.hero-figure--fleur { --hero-glow:#a8c7ff; }
 .showcase-name { position:relative; font-size:26px; font-weight:900; color:#fff6cb; text-align:center; }
 .showcase-title { position:relative; margin-top:4px; color:#bfc6ce; text-align:center; font-size:13px; }
 .hero-switch { width:48px; min-height:80px; border-radius:8px; font-size:52px; background:rgba(255,255,255,0.07); color:#f4df93; border:1px solid rgba(244,223,147,0.22); }
@@ -699,17 +700,25 @@ body.ceremony #game {
 .hero-card:hover { border-color:rgba(224,197,101,0.3); background:rgba(20,28,24,0.8); }
 .hero-card.selected { border-color:#e0c565; background:rgba(224,197,101,0.12); box-shadow:0 0 18px rgba(224,197,101,0.35), inset 0 0 8px rgba(224,197,101,0.08); }
 
-.hero-avatar { width:44px; height:44px; border-radius:50%; margin:0 auto 4px; display:flex; align-items:center; justify-content:center; font-size:22px; }
-.harry-avatar { background:radial-gradient(circle,#8b2020,#4a0f0f); }
-.cedric-avatar { background:radial-gradient(circle,#b8960a,#5a3e08); }
-.viktor-avatar { background:radial-gradient(circle,#2a4a6b,#0f1f33); }
-.fleur-avatar { background:radial-gradient(circle,#6b8fbe,#2a3f5f); }
+.hero-avatar { width:54px; height:66px; border-radius:7px; margin:0 auto 4px; display:flex; align-items:center; justify-content:center; position:relative; overflow:visible; background:linear-gradient(180deg,rgba(255,255,255,0.08),rgba(0,0,0,0.26)); color:transparent; }
+.hero-avatar::before { content:""; position:absolute; inset:-11px -15px -6px; background:var(--hero-image) center bottom / contain no-repeat; filter:drop-shadow(0 7px 6px rgba(0,0,0,0.48)); }
+.hero-card.selected .hero-avatar { animation:hero-card-breathe 1.8s ease-in-out infinite; }
 
 .hero-name { font-size:13px; font-weight:700; color:#f4f0d8; margin-bottom:2px; }
 .hero-title { font-size:10px; color:#a09878; margin-bottom:4px; }
 .hero-desc { font-size:10px; color:#8a846a; margin-bottom:4px; line-height:1.3; }
 .hero-skill, .hero-weapon { font-size:9px; color:#c0b46a; line-height:1.3; }
 .hero-weapon { color:#a0c0e0; }
+
+@keyframes hero-showcase-float {
+  0%, 100% { transform: translateY(-8px) rotateY(-2deg); }
+  50% { transform: translateY(-16px) rotateY(2deg); }
+}
+
+@keyframes hero-card-breathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-3px) scale(1.04); }
+}
 
 .btn-enter-maze {
   display:block; width:100%; padding:14px; margin-top:12px; border-radius:10px;
@@ -726,7 +735,7 @@ body.ceremony #game {
   .hero-showcase { grid-column:2; }
   #hero-next { grid-column:3; }
   .hero-attribute-panel { grid-column:1 / -1; grid-row:2; }
-  .hero-showcase-avatar { width:122px; height:158px; font-size:58px; }
+  .hero-showcase-avatar { width:146px; height:172px; }
   .showcase-name { font-size:20px; }
   .hero-switch { width:38px; min-height:58px; font-size:38px; }
 }

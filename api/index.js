@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const path = require('path');
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '..')));
 
 function makeAdminToken(uid) {
   var exp = Date.now() + ADMIN_TOKEN_TTL_MS;
