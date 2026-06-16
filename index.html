@@ -8,6 +8,7 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <title>暮篱迷宫 - 三强争霸赛</title>
     <link rel="stylesheet" href="./src/styles.css?v=20260614d" />
+    <link rel="manifest" href="/manifest.json" />
   </head>
   <body>
     <main id="game-shell">
@@ -75,6 +76,7 @@
           <button id="btn-mark" class="mobile-btn mobile-btn--mark">标记</button>
           <button id="btn-scroll" class="mobile-btn mobile-btn--scroll">显形</button>
           <button id="btn-weapon" class="mobile-btn mobile-btn--weapon">武器R</button>
+          <button id="btn-map" class="mobile-btn mobile-btn--map hidden">地图M</button>
         </div>
       </div>
 
@@ -99,6 +101,10 @@
           <div class="meter meter--narrow">
             <span>标记</span>
             <strong id="dead-end-count">0</strong>
+          </div>
+          <div class="meter meter--narrow hidden" id="map-hud">
+            <span>地图</span>
+            <strong id="map-count">0</strong>
           </div>
           <div class="meter meter--stamina">
             <div class="stamina-bar"><div id="stamina-fill"></div></div>
@@ -154,8 +160,8 @@
               <div class="hero-name">塞德里克·迪戈里</div>
               <div class="hero-title">赫奇帕奇级长</div>
               <div class="hero-desc">正直沉稳，耐力与团队协作极强</div>
-              <div class="hero-skill"><b>被动：</b>火把消耗-35%，答错扣血-25%</div>
-              <div class="hero-weapon"><b>武器R：</b>速速禁锢定身咒</div>
+              <div class="hero-skill"><b>被动：</b>火把消耗-35%，答错扣血-25%，待机自动回血</div>
+              <div class="hero-weapon"><b>武器R：</b>速速禁锢：定身全体敌人+2.5秒加速</div>
             </div>
             <div class="hero-card" data-hero="viktor">
               <div class="hero-avatar viktor-avatar">🦈</div>
@@ -170,8 +176,8 @@
               <div class="hero-name">芙蓉·德拉库尔</div>
               <div class="hero-title">布斯巴顿之花</div>
               <div class="hero-desc">媚娃血统，感知魔法与药剂学</div>
-              <div class="hero-skill"><b>被动：</b>探照范围+25%，远距感知死路</div>
-              <div class="hero-weapon"><b>道具R：</b>福灵剂排除2个错误答案</div>
+              <div class="hero-skill"><b>被动：</b>探照范围+25%，远距感知死路，附近摄魂怪减速20%</div>
+              <div class="hero-weapon"><b>道具R：</b>福灵剂：谜题排除错误答案/战斗中5秒幸运保护</div>
             </div>
         </div>
 
@@ -210,6 +216,7 @@
           <button id="settings-stats" class="btn-secondary">查看排名</button>
           <button id="settings-rules" class="btn-secondary">查看规则</button>
           <button id="settings-continue" class="btn-secondary">继续游戏</button>
+          <button id="btn-pwa-install" class="btn-secondary hidden">安装到桌面</button>
         </div>
       </section>
 
@@ -234,6 +241,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
     <script src="./src/GLTFLoader.js"></script>
-    <script src="./src/main.js?v=20260616f"></script>
+    <script src="./src/main.js?v=20260616g"></script>
+    <script>
+      if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
+      var _pwaInstallPrompt=null;
+      window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_pwaInstallPrompt=e;var btn=document.getElementById('btn-pwa-install');if(btn)btn.classList.remove('hidden');});
+      var pwaBtn=document.getElementById('btn-pwa-install');
+      if(pwaBtn){pwaBtn.addEventListener('click',function(){if(!_pwaInstallPrompt)return;_pwaInstallPrompt.prompt();_pwaInstallPrompt.userChoice.then(function(){_pwaInstallPrompt=null;pwaBtn.classList.add('hidden');});});}
+      if(window.matchMedia('(display-mode: standalone)').matches){var b=document.getElementById('btn-pwa-install');if(b)b.classList.add('hidden');}
+    </script>
   </body>
 </html>

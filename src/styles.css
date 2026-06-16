@@ -808,3 +808,23 @@ body.ceremony #game {
     padding: 8px;
   }
 }
+
+/* 倒计时狂暴化 */
+#time.frenzy {
+  animation: frenzyBlink 0.5s ease-in-out infinite alternate;
+  color: #ff4444;
+}
+@keyframes frenzyBlink {
+  from { opacity: 1; }
+  to   { opacity: 0.25; }
+}
+
+/* 地图按钮 */
+.mobile-btn--map {
+  background: rgba(74, 53, 32, 0.85);
+  color: #f5e6c8;
+  border-color: rgba(245, 230, 200, 0.5);
+}
+.mobile-btn--map:active {
+  background: rgba(245, 230, 200, 0.3);
+}
