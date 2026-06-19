@@ -739,7 +739,7 @@ body.ceremony #game {
 
 /* ===== 大厅视觉重设计（增强层，置于媒体查询之前以便小屏覆盖生效） ===== */
 .lobby-panel {
-  overflow-y:auto; overflow-x:hidden;
+  overflow-y:auto; overflow-x:hidden; max-height:90vh; touch-action:pan-y;
   border:1px solid rgba(230,196,106,0.34);
   background:
     radial-gradient(120% 80% at 50% -10%, rgba(245,214,110,0.10), transparent 46%),
