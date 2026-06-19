@@ -168,8 +168,8 @@ var weaponCooldown = 0;
 
 // ===== 大厅交互 =====
 var heroOrder=["harry","cedric","viktor","fleur"];
-var HERO_IMAGE_SRC={harry:"../image/processed/harry.png",cedric:"../image/processed/cedric.png",viktor:"../image/processed/viktor.png",fleur:"../image/processed/fleur.png"};
-var WORLD_IMAGE_SRC={sphinx:"./image/processed/sphinx.png",blastEnded:"./image/processed/blast-ended-skrewt.png",dementor:"./image/processed/dementor.png"};
+var HERO_IMAGE_SRC={harry:"../image/processed/harry.webp",cedric:"../image/processed/cedric.webp",viktor:"../image/processed/viktor.webp",fleur:"../image/processed/fleur.webp"};
+var WORLD_IMAGE_SRC={sphinx:"./image/processed/sphinx.webp",blastEnded:"./image/processed/blast-ended-skrewt.webp",dementor:"./image/processed/dementor.webp"};
 var MODEL_PATHS={dementor:"./image/Dementor.glb",sphinx:"./image/Sphinx.glb",skrewt:"./image/Blast-Ended_Skrewt.glb"};
 var modelCache={},modelMixers=[],modelsLoaded=false;
 function loadModel(key){return new Promise(function(resolve){if(!THREE.GLTFLoader){console.warn("GLTFLoader not available, skipping: "+key);resolve(null);return}try{var loader=new THREE.GLTFLoader();loader.load(MODEL_PATHS[key],function(gltf){modelCache[key]=gltf;console.log("Model loaded: "+key);resolve(gltf)},undefined,function(e){console.warn("Model load failed: "+key,e);resolve(null)})}catch(e){console.warn("Model load error: "+key,e);resolve(null)}})}

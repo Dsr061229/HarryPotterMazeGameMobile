@@ -1,9 +1,9 @@
-var CACHE_NAME = 'maze-v2';
+var CACHE_NAME = 'maze-v3';
 var PRECACHE = [
-  '/index.html',
-  '/src/main.js',
-  '/src/styles.css',
-  '/src/GLTFLoader.js',
+  './index.html',
+  './src/main.js',
+  './src/styles.css',
+  './src/GLTFLoader.js',
   'https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js'
 ];
 
@@ -22,6 +22,10 @@ self.addEventListener('activate', function(e) {
 });
 
 self.addEventListener('fetch', function(e) {
+  if (e.request.method !== 'GET') return;
+  var url = e.request.url;
+  // 不缓存 API 与 Supabase 请求，避免拿到过期的鉴权/数据响应。
+  if (url.indexOf('/api/') !== -1 || url.indexOf('supabase') !== -1 || url.indexOf('workers.dev') !== -1) return;
   e.respondWith(caches.match(e.request).then(function(cached) {
     if (cached) return cached;
     return fetch(e.request).then(function(response) {

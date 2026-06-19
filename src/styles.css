@@ -651,7 +651,7 @@ body.ceremony #game {
 .hero-showcase { min-height:330px; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; border-radius:8px; overflow:hidden; background:radial-gradient(circle at 50% 42%,rgba(245,214,110,0.18),transparent 34%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(0,0,0,0.22)); }
 .hero-showcase::before { content:""; position:absolute; width:240px; height:54px; bottom:42px; border-radius:50%; background:radial-gradient(ellipse,rgba(255,215,95,0.42),transparent 68%); filter:blur(2px); }
 .hero-showcase-avatar { width:210px; height:250px; border-radius:8px; display:flex; align-items:center; justify-content:center; position:relative; transform:translateY(-8px); background:linear-gradient(180deg,rgba(255,255,255,0.07),rgba(0,0,0,0.18)); box-shadow:0 24px 42px rgba(0,0,0,0.34); color:transparent; animation:hero-showcase-float 3.6s ease-in-out infinite; }
-.hero-showcase-avatar::before { content:""; position:absolute; inset:-20px -28px -12px; background:var(--hero-image) center bottom / contain no-repeat; filter:drop-shadow(0 18px 16px rgba(0,0,0,0.52)) drop-shadow(0 0 18px rgba(224,197,101,0.26)); }
+.hero-showcase-avatar::before { content:""; position:absolute; inset:8px -18px -6px; background:var(--hero-image) center bottom / contain no-repeat; filter:drop-shadow(0 18px 16px rgba(0,0,0,0.52)) drop-shadow(0 0 18px rgba(224,197,101,0.26)); }
 .hero-showcase-avatar::after { content:""; position:absolute; left:15%; right:15%; bottom:-18px; height:34px; border-radius:50%; background:radial-gradient(ellipse,rgba(255,215,95,0.35),rgba(0,0,0,0.05) 68%,transparent 72%); filter:blur(2px); transform:perspective(220px) rotateX(64deg); }
 .hero-figure--harry { --hero-glow:#7dbfff; }
 .hero-figure--cedric { --hero-glow:#e0c565; }
@@ -711,8 +711,8 @@ body.ceremony #game {
 .hero-weapon { color:#a0c0e0; }
 
 @keyframes hero-showcase-float {
-  0%, 100% { transform: translateY(-8px) rotateY(-2deg); }
-  50% { transform: translateY(-16px) rotateY(2deg); }
+  0%, 100% { transform: translateY(-4px) rotateY(-2deg); }
+  50% { transform: translateY(-9px) rotateY(2deg); }
 }
 
 @keyframes hero-card-breathe {

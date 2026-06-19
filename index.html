@@ -7,8 +7,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>暮篱迷宫 - 三强争霸赛</title>
-    <link rel="stylesheet" href="./src/styles.css?v=20260614d" />
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260619a" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   </head>
   <body>
     <main id="game-shell">
@@ -183,6 +184,7 @@
 
         <button id="start" class="btn-enter-maze">踏入迷宫</button>
         <button id="lobby-stats" class="btn-secondary lobby-rank-btn">查看排名</button>
+        <button id="lobby-install" class="btn-secondary lobby-rank-btn hidden">📲 安装到桌面</button>
       </section>
 
       <section id="difficulty-panel" class="panel hidden">
@@ -241,14 +243,17 @@
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
     <script src="./src/GLTFLoader.js"></script>
-    <script src="./src/main.js?v=20260616g"></script>
+    <script src="./src/main.js?v=20260619a"></script>
     <script>
-      if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){});}
+      if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(function(){});}
       var _pwaInstallPrompt=null;
-      window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_pwaInstallPrompt=e;var btn=document.getElementById('btn-pwa-install');if(btn)btn.classList.remove('hidden');});
-      var pwaBtn=document.getElementById('btn-pwa-install');
-      if(pwaBtn){pwaBtn.addEventListener('click',function(){if(!_pwaInstallPrompt)return;_pwaInstallPrompt.prompt();_pwaInstallPrompt.userChoice.then(function(){_pwaInstallPrompt=null;pwaBtn.classList.add('hidden');});});}
-      if(window.matchMedia('(display-mode: standalone)').matches){var b=document.getElementById('btn-pwa-install');if(b)b.classList.add('hidden');}
+      function _pwaButtons(){return [document.getElementById('btn-pwa-install'),document.getElementById('lobby-install')].filter(Boolean);}
+      function _pwaShow(show){_pwaButtons().forEach(function(b){b.classList[show?'remove':'add']('hidden');});}
+      var _isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+      window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_pwaInstallPrompt=e;if(!_isStandalone)_pwaShow(true);});
+      window.addEventListener('appinstalled',function(){_pwaInstallPrompt=null;_pwaShow(false);});
+      _pwaButtons().forEach(function(btn){btn.addEventListener('click',function(){if(!_pwaInstallPrompt)return;_pwaInstallPrompt.prompt();_pwaInstallPrompt.userChoice.then(function(){_pwaInstallPrompt=null;_pwaShow(false);});});});
+      if(_isStandalone)_pwaShow(false);
     </script>
   </body>
 </html>
