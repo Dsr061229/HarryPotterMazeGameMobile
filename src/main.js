@@ -227,7 +227,7 @@ if(settingsRules)settingsRules.addEventListener("click",function(){rulesReturnSt
 
 // ===== 用户系统 =====
 var currentUser = null, isAdmin = false, adminToken = "", userToken = "";
-var DEFAULT_API_BASE = "";
+var DEFAULT_API_BASE = "https://harry-potter-maze-api.158486706.workers.dev";
 var SUPABASE_REST_URL = "https://psadnnnoyeqinuixwumj.supabase.co/rest/v1";
 var SUPABASE_PUBLIC_KEY = "sb_publishable_iwAnf0X2uoGzL_y8gasb0A_sMII0EVm";
 var API_BASE = getInitialApiBase();

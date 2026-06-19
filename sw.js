@@ -1,4 +1,4 @@
-var CACHE_NAME = 'maze-v1';
+var CACHE_NAME = 'maze-v2';
 var PRECACHE = [
   '/index.html',
   '/src/main.js',
