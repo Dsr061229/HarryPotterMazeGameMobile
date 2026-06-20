@@ -7,14 +7,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="mobile-web-app-capable" content="yes" />
     <title>暮篱迷宫 - 三强争霸赛</title>
-    <link rel="stylesheet" href="./src/styles.css?v=20260619e" />
+    <link rel="stylesheet" href="./src/styles.css?v=20260620a" />
     <link rel="manifest" href="./manifest.json" />
     <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   </head>
   <body>
     <main id="game-shell">
       <canvas id="game"></canvas>
-      <div id="vignette" aria-hidden="true"></div>
 
       <!-- 横屏提示遮罩 -->
       <div id="rotate-hint">
@@ -219,7 +218,7 @@
           <button id="settings-stats" class="btn-secondary">查看排名</button>
           <button id="settings-rules" class="btn-secondary">查看规则</button>
           <button id="settings-continue" class="btn-secondary">继续游戏</button>
-          <button id="btn-pwa-install" class="btn-secondary hidden">安装到桌面</button>
+          <button id="btn-pwa-install" class="btn-secondary">📲 安装到桌面</button>
         </div>
       </section>
 
@@ -244,17 +243,30 @@
 
     <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
     <script src="./src/GLTFLoader.js"></script>
-    <script src="./src/main.js?v=20260619e"></script>
+    <script src="./src/main.js?v=20260620a"></script>
     <script>
       if('serviceWorker' in navigator){navigator.serviceWorker.register('./sw.js').catch(function(){});}
-      var _pwaInstallPrompt=null;
-      function _pwaButtons(){return [document.getElementById('btn-pwa-install'),document.getElementById('lobby-install')].filter(Boolean);}
-      function _pwaShow(show){_pwaButtons().forEach(function(b){b.classList[show?'remove':'add']('hidden');});}
-      var _isStandalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
-      window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_pwaInstallPrompt=e;if(!_isStandalone)_pwaShow(true);});
-      window.addEventListener('appinstalled',function(){_pwaInstallPrompt=null;_pwaShow(false);});
-      _pwaButtons().forEach(function(btn){btn.addEventListener('click',function(){if(!_pwaInstallPrompt)return;_pwaInstallPrompt.prompt();_pwaInstallPrompt.userChoice.then(function(){_pwaInstallPrompt=null;_pwaShow(false);});});});
-      if(_isStandalone)_pwaShow(false);
+      var _pwaPrompt=null,_pwaInstalled=false;
+      function _isStandalone(){return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;}
+      function _isIOS(){return /iphone|ipad|ipod/i.test(navigator.userAgent);}
+      var _settingsBtn=document.getElementById('btn-pwa-install');
+      var _lobbyBtn=document.getElementById('lobby-install');
+      function _pwaSync(){
+        var installed=_pwaInstalled||_isStandalone();
+        if(_settingsBtn)_settingsBtn.textContent=installed?'✅ 已安装到桌面':'📲 安装到桌面';
+        if(_lobbyBtn)_lobbyBtn.classList[(_pwaPrompt&&!installed)?'remove':'add']('hidden');
+      }
+      window.addEventListener('beforeinstallprompt',function(e){e.preventDefault();_pwaPrompt=e;_pwaSync();});
+      window.addEventListener('appinstalled',function(){_pwaInstalled=true;_pwaPrompt=null;_pwaSync();});
+      function _doInstall(){
+        if(_pwaInstalled||_isStandalone()){alert('应用已安装到桌面，可从主屏幕直接打开。');return;}
+        if(_pwaPrompt){_pwaPrompt.prompt();_pwaPrompt.userChoice.then(function(c){if(c&&c.outcome==='accepted')_pwaInstalled=true;_pwaPrompt=null;_pwaSync();});return;}
+        if(_isIOS()){alert('在 iPhone / iPad 上安装：点击浏览器底部的「分享」按钮，选择「添加到主屏幕」即可。');return;}
+        alert('当前浏览器暂不支持一键安装，或应用已安装。可在浏览器菜单中选择「安装应用 / 添加到主屏幕」。');
+      }
+      if(_settingsBtn)_settingsBtn.addEventListener('click',_doInstall);
+      if(_lobbyBtn)_lobbyBtn.addEventListener('click',_doInstall);
+      _pwaSync();
     </script>
   </body>
 </html>

@@ -497,11 +497,11 @@ var mazeRows=[],startCell={r:1,c:1},exitCell={r:13,c:13};
 
 // ===== Three.js =====
 if(typeof THREE==='undefined'){alert('Three.js库加载失败');throw new Error('THREE undefined')}
-var scene=new THREE.Scene();scene.background=new THREE.Color(0x1a2a1e);scene.fog=new THREE.Fog(0x1a2a1e,4.5,26);
+var scene=new THREE.Scene();scene.background=new THREE.Color(0x1a2a1e);scene.fog=new THREE.Fog(0x1a2a1e,5,28);
 var camera=new THREE.PerspectiveCamera(72,window.innerWidth/window.innerHeight,0.1,80);camera.rotation.order="YXZ";scene.add(camera);
 var isMobile=('ontouchstart' in window)||(navigator.maxTouchPoints||0)>0;
-var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:false,powerPreference:"high-performance"});renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.2));try{renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.1}catch(e){}renderer.shadowMap.enabled=!isMobile;if(!isMobile)renderer.shadowMap.type=THREE.PCFSoftShadowMap;try{if(THREE.SRGBColorSpace)renderer.outputColorSpace=THREE.SRGBColorSpace}catch(e){}var ambient=new THREE.AmbientLight(0x6a82a8,1.3);scene.add(ambient);
-var hemi=new THREE.HemisphereLight(0x88bb88,0x3a2a1a,0.55);scene.add(hemi);
+var renderer=new THREE.WebGLRenderer({canvas:canvas,antialias:false,powerPreference:"high-performance"});renderer.setSize(window.innerWidth,window.innerHeight);renderer.setPixelRatio(Math.min(window.devicePixelRatio,1.2));renderer.shadowMap.enabled=!isMobile;if(!isMobile)renderer.shadowMap.type=THREE.PCFSoftShadowMap;try{if(THREE.SRGBColorSpace)renderer.outputColorSpace=THREE.SRGBColorSpace}catch(e){}var ambient=new THREE.AmbientLight(0x6a8a6a,2.0);scene.add(ambient);
+var hemi=new THREE.HemisphereLight(0x88bb88,0x3a2a1a,0.7);scene.add(hemi);
 var moon=new THREE.DirectionalLight(0xeeddbb,1.0);moon.position.set(-18,32,-8);moon.castShadow=true;moon.shadow.mapSize.set(512,512);scene.add(moon);
 var lumos=new THREE.SpotLight(0xf5faff,14,22,Math.PI/4.5,0.3,1.5);lumos.position.set(0.34,-0.22,-0.22);lumos.target.position.set(0,-0.22,-5);camera.add(lumos,lumos.target);
 

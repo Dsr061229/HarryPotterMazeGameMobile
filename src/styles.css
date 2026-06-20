@@ -39,15 +39,6 @@ body {
   touch-action: none;
 }
 
-/* 氛围暗角：压暗四角、聚焦中央，营造迷宫夜色 */
-#vignette {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 4;
-  background: radial-gradient(ellipse at 50% 46%, transparent 52%, rgba(0,0,0,0.32) 88%, rgba(0,0,0,0.5) 100%);
-}
-
 /* ===== 移动端控制层 ===== */
 #mobile-controls {
   position: fixed;
